@@ -1,0 +1,26 @@
+{
+  "retrieved_at": "2026-08-30T01:45:00Z",
+  "method": "web search snippets (market-data vendor APIs are blocked by this environment's network policy); values cross-checked across two sources, may be off by cents",
+  "quotes": {
+    "SPY": {
+      "close": 769.35,
+      "prev_close": 771.10,
+      "change_pct": -0.23,
+      "date": "2026-08-28",
+      "sources": [
+        {"name": "Investing.com", "url": "https://www.investing.com/etfs/spdr-s-p-500"},
+        {"name": "MacroTrends", "url": "https://www.macrotrends.net/stocks/charts/SPY/state-street-spdr-s-p-500-etf-trust/stock-price-history"}
+      ]
+    },
+    "QQQ": {
+      "close": 716.43,
+      "prev_close": 721.11,
+      "change_pct": -0.65,
+      "date": "2026-08-28",
+      "sources": [
+        {"name": "CNBC", "url": "https://www.cnbc.com/quotes/QQQ"},
+        {"name": "MarketChameleon", "url": "https://marketchameleon.com/Overview/QQQ/Summary/"}
+      ]
+    }
+  }
+}

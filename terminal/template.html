@@ -198,6 +198,15 @@ td .sect{color:var(--ink-3);font-size:11px}
 #tip .th{font-weight:700;font-size:12.5px;margin-bottom:5px}
 #tip .tr{display:flex;justify-content:space-between;gap:16px;font-family:var(--mono);padding:1px 0}
 #tip .tr span:first-child{color:var(--ink-2);font-family:var(--sans)}
+.notice{border:1px solid rgba(189,132,32,.45);background:rgba(189,132,32,.09);
+  border-radius:12px;padding:10px 14px;font-size:12px;color:var(--ink-2);
+  line-height:1.55;margin-bottom:14px}
+.notice b{color:var(--amber-t)}
+.notice a{color:var(--pos-t)}
+.realtag{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;
+  color:var(--amber-t);text-transform:uppercase}
+.enginetag{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:4px}
+.enginetag a{color:var(--ink-3)}
 .footer{margin-top:22px;font-size:11.5px;color:var(--ink-3);line-height:1.6}
 .footer b{color:var(--ink-2)}
 </style>
@@ -214,6 +223,7 @@ td .sect{color:var(--ink-3);font-size:11px}
     <span class="asof" id="asof"></span>
   </header>
   <nav class="tabs" id="tabs"></nav>
+  <div id="notice"></div>
   <main id="view"></main>
   <div class="drawer" id="drawer"></div>
 </div>
@@ -315,6 +325,21 @@ function sparkHover(canvas, name){
   $('#asof').textContent = 'as of '+SNAP.as_of+' · built '+SNAP.generated_at.slice(0,16).replace('T',' ')+'Z';
 }
 
+/* ---------------- synthetic notice ---------------- */
+const REALQ = (SNAP.real && SNAP.real.quotes) || {};
+if(SNAP.data_origin==='SYNTHETIC'){
+  const hasReal = Object.keys(REALQ).length>0;
+  $('#notice').innerHTML = `<div class="notice">
+    <b>Engine data is synthetic.</b> This environment's network policy blocks every
+    market-data vendor (Alpaca, Yahoo, Stooq, Tiingo, Polygon), so the screener, themes,
+    scanner and charts run on the brain's synthetic generator — they are not real market numbers.
+    ${hasReal?`Index closes marked <span class="realtag">real</span> were web-verified separately.`:''}
+    To light the whole platform up with real data: allow <b>stooq.com</b> and
+    <b>query1.finance.yahoo.com</b> in the environment's network settings
+    (claude.ai &rarr; Code &rarr; Environments), then ask Claude to refresh.
+  </div>`;
+}
+
 /* ---------------- router ---------------- */
 const VIEWS = [['overview','Overview'],['screener','Screener'],['themes','Themes'],
                ['scanner','Scanner'],['research','Research']];
@@ -387,14 +412,24 @@ RENDER.overview = function(){
   const idx = Object.entries(SNAP.indexes);
   $('#view').innerHTML = `
   <div class="grid tiles" style="margin-bottom:14px">
-    ${idx.map(([s,d])=>`
-      <section class="panel tile">
+    ${idx.map(([s,d])=>{
+      const rq = REALQ[s];
+      if(rq){
+        const srcs = (rq.sources||[]).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a>`).join(' · ');
+        return `<section class="panel tile">
+        <div class="row1"><span class="sym">${s}</span>
+          <span class="num big">${rq.close.toFixed(2)}</span>${chip(rq.change_pct)}
+          <span class="realtag" title="${esc(SNAP.real.method||'')}">real · ${esc(rq.date)}</span></div>
+        <canvas data-spark="${s}"></canvas>
+        <div class="enginetag">engine series above is synthetic (its close: ${d.close.toFixed(2)}) · real close via ${srcs}</div>
+      </section>`;}
+      return `<section class="panel tile">
         <div class="row1"><span class="sym">${s}</span>
           <span class="num big">${d.close.toFixed(2)}</span>${chip(d.d1)}</div>
         <canvas data-spark="${s}"></canvas>
         <div class="meta"><span>YTD ${d.ytd===null?'—':(d.ytd>0?'+':'')+d.ytd.toFixed(1)+'%'}</span>
           <span>DD ${d.dd.toFixed(1)}%</span><span>VOL ${d.vol.toFixed(0)}%</span></div>
-      </section>`).join('')}
+      </section>`;}).join('')}
     <section class="panel stat">
       <h2>Market regime</h2>
       <div class="v">${esc(SNAP.regime.label)}</div>
@@ -640,6 +675,10 @@ RENDER.research = function(){
       <section class="panel">
         <h2>Data provenance</h2>
         <div class="note">${esc(SNAP.data_note||'')}</div>
+        ${Object.keys(REALQ).length?`<div class="note">Web-verified real closes on this page: ${
+          Object.entries(REALQ).map(([s,q])=>`${s} ${q.close.toFixed(2)} (${esc(q.date)}, ${
+            (q.sources||[]).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a>`).join(', ')})`).join(' · ')
+        }. Method: ${esc((SNAP.real&&SNAP.real.method)||'')}</div>`:''}
         <div class="note">Every number the Brain reports carries an evidence class
         (<b>SOURCE_FACT · INFERENCE · HYPOTHESIS · BACKTEST_RESULT · LIVE_MARKET_OBSERVATION · MODEL_ESTIMATE</b>)
         and no number changes class silently. This page is a snapshot of those outputs,

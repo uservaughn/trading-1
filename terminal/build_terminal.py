@@ -140,7 +140,12 @@ def build_snapshot(api):
                 "pct_near_hi": g["components"]["pct_near_52w_high"]}
 
     regime, dash, scan = api["regime"], api["dashboard"], api["scan"]
+    real = None
+    rq_path = os.path.join(ROOT, "real_quotes.json")
+    if os.path.exists(rq_path):
+        real = json.load(open(rq_path))
     return {
+        "real": real,
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "as_of": api["themes"]["as_of"],
         "data_origin": dash.get("data_origin"),
