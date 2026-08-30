@@ -56,6 +56,22 @@ body{
 .pill.synth{color:var(--amber-t);border-color:rgba(189,132,32,.45);cursor:help}
 .pill.synth .dot{background:var(--amber)}
 .asof{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.runscan{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.04em;
+  color:#06121f;background:linear-gradient(180deg,#6fb0ff,#4d8dff);border:0;border-radius:9px;
+  padding:7px 15px;cursor:pointer;box-shadow:0 2px 12px rgba(77,141,255,.4);transition:transform .1s}
+.runscan:hover{transform:translateY(-1px)}
+.runscan:active{transform:translateY(0)}
+.runscan.busy{opacity:.7;pointer-events:none}
+.runscan.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;
+  border:2px solid #06121f;border-top-color:transparent;border-radius:50%;
+  animation:spin .6s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.runscan.busy::before{animation:none}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);z-index:70;
+  background:#0b0d13;border:1px solid var(--line-2);border-radius:10px;padding:10px 18px;
+  font-size:13px;box-shadow:0 12px 30px rgba(0,0,0,.5);opacity:0;transition:all .25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast b{color:var(--pos-t)}
 nav.tabs{display:flex;gap:4px;margin-bottom:16px;border:1px solid var(--line);border-radius:12px;
   padding:4px;background:var(--panel);backdrop-filter:blur(14px);width:max-content;max-width:100%;overflow-x:auto}
 nav.tabs button{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink-2);
@@ -153,7 +169,15 @@ td .sect{color:var(--ink-3);font-size:11px}
   color:var(--ink-2);border-radius:8px;font-size:13px;padding:3px 10px;cursor:pointer}
 .drawer h3{margin:2px 0 2px;font-size:22px}
 .drawer .dsub{color:var(--ink-3);font-size:12px;margin-bottom:12px}
-.drawer canvas{width:100%;height:110px;display:block;margin:10px 0 4px}
+.drawer canvas{width:100%;display:block}
+.chartbar{display:flex;align-items:center;gap:8px;margin:12px 0 6px}
+.chartbar .seg{margin-left:0}
+.chartbar .lvltoggle{margin-left:auto;font-size:11px;color:var(--ink-2);display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.pricewrap{position:relative}
+#dprice{height:180px}
+#dvol{height:52px;margin-top:2px}
+.chartlegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.chartlegend i{display:inline-block;width:14px;height:0;border-top-width:2px;border-top-style:solid;vertical-align:3px;margin-right:4px}
 .kv{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:12.5px;margin-top:12px}
 .kv .k{color:var(--ink-2)}
 .kv .v{font-family:var(--mono);text-align:right}
@@ -173,6 +197,9 @@ td .sect{color:var(--ink-3);font-size:11px}
   text-transform:uppercase;padding:2px 8px;border-radius:6px;
   background:rgba(232,182,76,.13);color:var(--amber-t)}
 .statebadge.breakout{background:rgba(77,141,255,.16);color:var(--pos-t)}
+.scanrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.scanhint{font-size:12px;color:var(--ink-3)}
+.scanhint b{color:var(--pos-t)}
 
 /* ---- research ---- */
 .hyp{border-bottom:1px solid var(--line);padding:10px 2px}
@@ -218,6 +245,7 @@ td .sect{color:var(--ink-3);font-size:11px}
   <header class="topbar">
     <div class="brand"><b>BRAIN TERMINAL</b><span>AI Trading Brain</span></div>
     <span class="spacer"></span>
+    <button id="runscan" class="runscan">▶ RUN SCAN</button>
     <span id="regimepill"></span>
     <span id="synthpill"></span>
     <span class="asof" id="asof"></span>
@@ -310,6 +338,113 @@ function sparkHover(canvas, name){
       <div class="tr"><span>${esc(when)}</span><span>${v.toFixed(2)}</span></div>`, e.clientX, e.clientY);
   });
   canvas.addEventListener('mouseleave', hideTip);
+}
+
+/* ---------------- full price + volume chart (drawer) ---------------- */
+const KEY_LEVELS = [
+  ['hi52','52w high','#e8b64c','#bd8420'],
+  ['lo52','52w low','#8fd0a9','#57b57f'],
+  ['sma50','50 SMA','#7dabff','#4d8dff'],
+  ['sma200','200 SMA','#9aa3b8','#6a7490'],
+  ['base_hi','breakout','#f478b0','#e64f95'],
+];
+function drawPriceChart(canvas, row, type, showLevels){
+  const dpr = devicePixelRatio||1, o = row.ohlc;
+  const w = canvas.clientWidth||360, h = canvas.clientHeight||180;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const n = o.c.length; if(!n) return;
+  const padL=2, padR=52, padT=6, padB=6;
+  // y-range spans candles + any visible levels
+  let lo = Math.min(...o.l), hi = Math.max(...o.h);
+  const lv = {};
+  if(showLevels) KEY_LEVELS.forEach(([k])=>{ if(row.levels[k]!=null){ lv[k]=row.levels[k]; lo=Math.min(lo,lv[k]); hi=Math.max(hi,lv[k]); }});
+  const span=(hi-lo)||1;
+  const X = i => padL + i*(w-padL-padR)/(n-1);
+  const Y = v => padT + (hi-v)*(h-padT-padB)/span;
+  const bw = Math.max(1.5, (w-padL-padR)/n*0.62);
+  // faint grid + right-axis labels
+  ctx.font='9px ui-monospace,monospace'; ctx.textBaseline='middle';
+  for(let s=0;s<=4;s++){
+    const val=lo+span*s/4, y=Y(val);
+    ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillStyle='#6a7490'; ctx.textAlign='left'; ctx.fillText(val.toFixed(2), w-padR+4, y);
+  }
+  // key-level lines
+  if(showLevels){
+    ctx.setLineDash([4,3]); ctx.textAlign='right';
+    KEY_LEVELS.forEach(([k,label,light])=>{
+      if(lv[k]==null) return;
+      const y=Y(lv[k]);
+      ctx.strokeStyle=light; ctx.globalAlpha=.55; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+      ctx.globalAlpha=1;
+    });
+    ctx.setLineDash([]);
+  }
+  const up = i => o.c[i] >= o.o[i];
+  if(type==='line'){
+    const g=ctx.createLinearGradient(0,0,0,h);
+    const rising=o.c[n-1]>=o.c[0];
+    g.addColorStop(0, rising?'rgba(77,141,255,.22)':'rgba(230,79,149,.22)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.moveTo(X(0),Y(o.c[0])); for(let i=0;i<n;i++) ctx.lineTo(X(i),Y(o.c[i]));
+    ctx.lineTo(X(n-1),h-padB); ctx.lineTo(X(0),h-padB); ctx.closePath(); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(X(0),Y(o.c[0])); for(let i=0;i<n;i++) ctx.lineTo(X(i),Y(o.c[i]));
+    ctx.strokeStyle=rising?'#4d8dff':'#e64f95'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  } else if(type==='candle'){
+    for(let i=0;i<n;i++){
+      const c=up(i)?'#4d8dff':'#e64f95', x=X(i);
+      ctx.strokeStyle=c; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,Y(o.h[i])); ctx.lineTo(x,Y(o.l[i])); ctx.stroke();
+      const y1=Y(o.o[i]), y2=Y(o.c[i]);
+      ctx.fillStyle=c; ctx.fillRect(x-bw/2, Math.min(y1,y2), bw, Math.max(1,Math.abs(y2-y1)));
+    }
+  } else { // bar (OHLC)
+    for(let i=0;i<n;i++){
+      const c=up(i)?'#4d8dff':'#e64f95', x=X(i);
+      ctx.strokeStyle=c; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(x,Y(o.h[i])); ctx.lineTo(x,Y(o.l[i]));
+      ctx.moveTo(x-bw/2,Y(o.o[i])); ctx.lineTo(x,Y(o.o[i]));
+      ctx.moveTo(x,Y(o.c[i])); ctx.lineTo(x+bw/2,Y(o.c[i])); ctx.stroke();
+    }
+  }
+  canvas._chart={X,Y,n,padR,w,h,o,lv};
+}
+function drawVolume(canvas, row){
+  const dpr=devicePixelRatio||1, o=row.ohlc;
+  const w=canvas.clientWidth||360, h=canvas.clientHeight||52;
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
+  const n=o.v.length; if(!n) return;
+  const padL=2,padR=52, mx=Math.max(...o.v)||1;
+  const X=i=>padL+i*(w-padL-padR)/(n-1);
+  const bw=Math.max(1.2,(w-padL-padR)/n*0.62);
+  for(let i=0;i<n;i++){
+    const bh=(o.v[i]/mx)*(h-4);
+    ctx.fillStyle=(o.c[i]>=o.o[i])?'rgba(77,141,255,.55)':'rgba(230,79,149,.55)';
+    ctx.fillRect(X(i)-bw/2, h-bh, bw, bh);
+  }
+  ctx.font='9px ui-monospace,monospace'; ctx.textBaseline='top'; ctx.textAlign='left'; ctx.fillStyle='#6a7490';
+  ctx.fillText('vol '+(mx>=1e6?(mx/1e6).toFixed(1)+'M':(mx/1e3).toFixed(0)+'K'), w-padR+4, 2);
+  canvas._vol={X,n,w,padR};
+}
+function chartCrosshair(priceCv, volCv, row, name){
+  const o=row.ohlc;
+  function move(e){
+    const c=priceCv._chart; if(!c) return;
+    const r=priceCv.getBoundingClientRect();
+    const i=Math.max(0,Math.min(c.n-1, Math.round((e.clientX-r.left-2)/(r.width-2-c.padR)*(c.n-1))));
+    const chg=i>0?((o.c[i]/o.c[i-1]-1)*100):0;
+    showTip(`<div class="th">${esc(name)} <span style="color:var(--ink-3)">${esc(o.t[i])}</span></div>
+      <div class="tr"><span>O</span><span>${o.o[i].toFixed(2)}</span></div>
+      <div class="tr"><span>H</span><span>${o.h[i].toFixed(2)}</span></div>
+      <div class="tr"><span>L</span><span>${o.l[i].toFixed(2)}</span></div>
+      <div class="tr"><span>C</span><span>${o.c[i].toFixed(2)} (${chg>0?'+':''}${chg.toFixed(2)}%)</span></div>
+      <div class="tr"><span>Vol</span><span>${o.v[i]>=1e6?(o.v[i]/1e6).toFixed(2)+'M':(o.v[i]/1e3).toFixed(0)+'K'}</span></div>`,
+      e.clientX, e.clientY);
+  }
+  [priceCv,volCv].forEach(cv=>{ cv.addEventListener('mousemove',move); cv.addEventListener('mouseleave',hideTip); });
 }
 
 /* ---------------- topbar ---------------- */
@@ -609,10 +744,17 @@ RENDER.themes = function(){
 /* ---------------- scanner ---------------- */
 RENDER.scanner = function(){
   const sc = SNAP.scan;
+  // Prefer a client-side RUN SCAN result; otherwise the brain's precomputed scan.
+  const useClient = !!SCAN.cands;
+  const list = useClient ? SCAN.cands : sc.candidates;
   $('#view').innerHTML = `
   <section class="panel" style="margin-bottom:14px">
-    <h2>${esc(sc.strategy)}<span class="sub">scanned ${sc.symbols_scanned} · ${sc.breakouts_today} breakout today · ${sc.approaching} approaching · as of ${sc.as_of}</span></h2>
-    <div class="comp" style="grid-template-columns:150px 1fr 40px">${
+    <h2>${esc(sc.strategy)}<span class="sub">${SNAP.rows.filter(r=>!r.etf).length} symbols scanned · ${list.filter(c=>c.state==='breakout').length} breakout · ${list.length} candidates · data as of ${sc.as_of}</span></h2>
+    <div class="scanrow">
+      <span class="scanhint">Press <b>▶ RUN SCAN</b> (top right) to re-run the SAR composite over the current data.</span>
+      <span class="asof" id="scanstamp"></span>
+    </div>
+    <div class="comp" style="grid-template-columns:150px 1fr 40px;margin-top:10px">${
       Object.entries(sc.weights).map(([k,w])=>`
         <span>${esc(k.replace(/_/g,' '))}</span>
         <span class="cb" style="width:${(w*100/0.15*0.9).toFixed(0)}%;max-width:100%"></span>
@@ -620,9 +762,23 @@ RENDER.scanner = function(){
     }</div>
   </section>
   <div class="grid cands">${
-    sc.candidates.map(c=>{
+    list.slice(0,60).map(c=>{
+      if(useClient){
+        const r = SNAP.rows.find(x=>x.sym===c.symbol) || {};
+        return `<section class="panel cand" data-sym="${c.symbol}">
+        <div class="chead"><span class="sym">${esc(c.symbol)}</span>
+          <span class="statebadge ${c.state==='breakout'?'breakout':(c.state==='watch'?'':'')}">${esc(c.state)}</span>
+          <span class="score">${c.score.toFixed(0)}</span></div>
+        <div class="dsub" style="margin:-4px 0 8px">${esc(c.sector||'')}</div>
+        <div class="kv">
+          <span class="k">RS percentile</span><span class="v">${c.rs==null?'—':c.rs.toFixed(1)}</span>
+          <span class="k">3-month return</span><span class="v">${c.m3==null?'—':(c.m3>0?'+':'')+c.m3.toFixed(1)+'%'}</span>
+          <span class="k">to breakout</span><span class="v">${c.bdist==null?'—':c.bdist.toFixed(2)+'%'}</span>
+          <span class="k">base quality</span><span class="v">${c.baseq==null?'—':c.baseq.toFixed(2)}</span>
+        </div></section>`;
+      }
       const d = c.detail && c.detail.setup ? c.detail.setup : {};
-      return `<section class="panel cand">
+      return `<section class="panel cand" data-sym="${c.symbol}">
       <div class="chead"><span class="sym">${esc(c.symbol)}</span>
         <span class="statebadge ${c.state==='breakout'?'breakout':''}">${esc(c.state)}</span>
         <span class="score">${c.score.toFixed(0)}</span></div>
@@ -632,15 +788,18 @@ RENDER.scanner = function(){
           <span class="cv">${v.score.toFixed(0)}</span></div>`).join('')}
       <div class="kv" style="margin-top:12px">
         <span class="k">prior move</span><span class="v">${d.prior_move_pct!==undefined?'+'+d.prior_move_pct.toFixed(1)+'% / '+d.prior_move_bars+' bars':'—'}</span>
-        <span class="k">base</span><span class="v">${d.base_length!==undefined?d.base_length+' bars · depth '+d.base_depth_pct.toFixed(1)+'%':'—'}</span>
         <span class="k">base quality</span><span class="v">${d.base_quality!==undefined?d.base_quality.toFixed(2):'—'}</span>
         <span class="k">breakout level</span><span class="v">${d.breakout_level!==undefined?d.breakout_level.toFixed(2):'—'}</span>
         <span class="k">RS percentile</span><span class="v">${d.rs_percentile!==undefined?d.rs_percentile.toFixed(1):'—'}</span>
-        <span class="k">RVOL</span><span class="v">${d.rvol!==undefined?d.rvol.toFixed(2):'—'}</span>
       </div>
       </section>`;}).join('')
   }</div>
-  ${sc.candidates.length===0?'<section class="panel"><div class="note">No candidates in today\'s scan.</div></section>':''}`;
+  ${list.length===0?'<section class="panel"><div class="note">No candidates. Press RUN SCAN.</div></section>':''}`;
+  updateScanStamp();
+  $('#view').querySelectorAll('.cand[data-sym]').forEach(el=>{
+    el.style.cursor='pointer';
+    el.addEventListener('click', ()=>openDrawer(el.dataset.sym));
+  });
 };
 
 /* ---------------- research ---------------- */
@@ -698,8 +857,15 @@ function openDrawer(sym){
     <h3>${r.sym}</h3>
     <div class="dsub">${esc(r.sector)}${r.etf?' · ETF':''}</div>
     <div><span class="num big">${r.close.toFixed(2)}</span> ${chip(r.d1)}</div>
-    <canvas id="dspark"></canvas>
-    <div class="dsub" style="font-family:var(--mono);font-size:10.5px">last ${r.spark.length} sessions</div>
+    <div class="chartbar">
+      <span class="seg" id="ctype">
+        <button data-ct="candle">Candle</button><button data-ct="bar">Bar</button><button data-ct="line">Line</button>
+      </span>
+      <label class="lvltoggle"><input type="checkbox" id="lvlck" checked> key levels</label>
+    </div>
+    <div class="pricewrap"><canvas id="dprice"></canvas></div>
+    <canvas id="dvol"></canvas>
+    <div class="chartlegend" id="dlegend"></div>
     <div class="kv">
       <span class="k">1 week</span><span class="v">${r.w1===null?'—':(r.w1>0?'+':'')+r.w1.toFixed(2)+'%'}</span>
       <span class="k">1 month</span><span class="v">${r.m1===null?'—':(r.m1>0?'+':'')+r.m1.toFixed(2)+'%'}</span>
@@ -720,12 +886,88 @@ function openDrawer(sym){
     </div>
     ${r.themes.length?`<div class="tagrow">${r.themes.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}`;
   d.classList.add('open');
-  drawSpark($('#dspark'), r.spark);
-  sparkHover($('#dspark'), r.sym);
+  const price=$('#dprice'), vol=$('#dvol');
+  let ctype = store.get('ctype','candle'), levels = store.get('lvls', true);
+  $('#lvlck').checked = levels;
+  function render(){
+    drawPriceChart(price, r, ctype, levels);
+    drawVolume(vol, r);
+    $('#ctype').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.ct===ctype));
+    $('#dlegend').innerHTML = levels ? KEY_LEVELS.filter(([k])=>r.levels[k]!=null)
+      .map(([k,lab,light])=>`<span><i style="border-color:${light}"></i>${lab} ${r.levels[k].toFixed(2)}</span>`).join('') : '';
+  }
+  render();
+  chartCrosshair(price, vol, r, r.sym);
+  $('#ctype').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    ctype=b.dataset.ct; store.set('ctype',ctype); render();
+  });
+  $('#lvlck').addEventListener('change', e=>{ levels=e.target.checked; store.set('lvls',levels); render(); });
   $('#dclose').addEventListener('click', closeDrawer);
 }
 function closeDrawer(){ $('#drawer').classList.remove('open'); }
 addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
+
+/* ---------------- RUN SCAN (client-side, over embedded data) ---------------- */
+// Recomputes the SAR composite from the embedded per-symbol features using the
+// brain's own component weights — no network, no credits. Data itself refreshes
+// only when the terminal is rebuilt (ask Claude, or the manual rebuild step).
+const sectorScore = {};
+SNAP.sectors.forEach(s=>{ s.members.forEach(m=>{ sectorScore[m]=s.score; }); });
+const themeScore = {};
+SNAP.themes.forEach(t=>{ t.members.forEach(m=>{ themeScore[m]=Math.max(themeScore[m]||0, t.score); }); });
+function computeScan(){
+  const W = SNAP.scan.weights, regime = SNAP.regime.strength;
+  const cands = [];
+  for(const r of SNAP.rows){
+    if(r.etf || r.baseq==null) continue;
+    const rs = r.rs==null?50:r.rs;
+    const comps = {
+      market_regime: regime,
+      sector_strength: sectorScore[r.sym] ?? 50,
+      theme_strength: themeScore[r.sym] ?? 50,
+      relative_strength: rs,
+      prior_momentum: Math.max(0, Math.min(100, 50 + (r.m3||0))),
+      consolidation_quality: (r.baseq||0)*100,
+      volume_pattern: Math.max(0, Math.min(100, 50 + ((r.rvol||1)-1)*50)),
+      breakout_quality: r.bdist==null?40:Math.max(0, Math.min(100, 100 - Math.abs(r.bdist)*8)),
+    };
+    let score = 0; for(const k in W) score += (comps[k]||0)*W[k];
+    // SAR setup: a qualifying base in a strong-RS leader, or a fresh breakout.
+    const breakout = r.bdist!=null && r.bdist<=0 && rs>=70;
+    const approaching = r.qual && rs>=80 && r.bdist!=null && r.bdist<=6;
+    if(!breakout && !approaching) continue;
+    cands.push({symbol:r.sym, state: breakout?'breakout':'approaching',
+      score:Math.round(score*10)/10, rs, m3:r.m3, bdist:r.bdist, baseq:r.baseq, sector:r.sector});
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  return cands;
+}
+let SCAN = {ran:null, cands:null};
+function runScan(){
+  const btn=$('#runscan'); btn.classList.add('busy');
+  setTimeout(()=>{
+    SCAN.cands = computeScan();
+    SCAN.ran = new Date();
+    store.set('lastscan', SCAN.ran.toISOString());
+    btn.classList.remove('busy');
+    toast(`Scan complete · <b>${SCAN.cands.length}</b> candidates · ${SCAN.cands.filter(c=>c.state==='breakout').length} breakout`);
+    if((location.hash.replace(/^#\//,'')||'overview')==='scanner') RENDER.scanner();
+    updateScanStamp();
+  }, 450);
+}
+function updateScanStamp(){
+  const el=$('#scanstamp'); if(!el) return;
+  const t = SCAN.ran || (store.get('lastscan')&&new Date(store.get('lastscan')));
+  el.textContent = t ? 'last scan '+new Date(t).toLocaleTimeString() : 'not run this session';
+}
+let toastTimer;
+function toast(html){
+  let el=$('#toast'); if(!el){ el=document.createElement('div'); el.id='toast'; el.className='toast'; document.body.appendChild(el); }
+  el.innerHTML=html; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'), 2600);
+}
+$('#runscan').addEventListener('click', runScan);
 
 route();
 </script>

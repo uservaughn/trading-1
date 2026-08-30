@@ -32,12 +32,12 @@ def fetch_api():
     handler = urllib.request.ProxyHandler({})  # never route localhost through a proxy
     opener = urllib.request.build_opener(handler)
     try:
-        for _ in range(60):
+        for _ in range(120):
             try:
-                opener.open(f"http://127.0.0.1:{PORT}/api/status", timeout=2)
+                opener.open(f"http://127.0.0.1:{PORT}/api/status", timeout=5)
                 break
             except OSError:
-                time.sleep(0.5)
+                time.sleep(1.0)
         else:
             raise RuntimeError("brain API did not come up")
         out = {}
@@ -58,10 +58,28 @@ def build_snapshot(api):
     sym_ids = {r["symbol"]: r["id"] for r in db.execute("SELECT id, symbol FROM symbols")}
     ids_sym = {v: k for k, v in sym_ids.items()}
 
+    # Full OHLCV per symbol. `series` keeps (date, close, volume) for the return
+    # math; `ohlcv` keeps the last CHART_BARS full candles for the drawer chart.
+    CHART_BARS = 130
     series = {}
-    for r in db.execute("SELECT symbol_id, ts, close, volume FROM market_data_daily ORDER BY ts"):
+    bars = {}
+    for r in db.execute("SELECT symbol_id, ts, open, high, low, close, volume "
+                        "FROM market_data_daily ORDER BY ts"):
         d = dt.datetime.fromtimestamp(r["ts"], dt.timezone.utc).strftime("%Y-%m-%d")
         series.setdefault(r["symbol_id"], []).append((d, r["close"], r["volume"]))
+        bars.setdefault(r["symbol_id"], []).append(
+            (d, r["open"], r["high"], r["low"], r["close"], r["volume"]))
+
+    # Latest technical indicators (SMAs) per symbol, for key-level overlays.
+    ind = {}
+    for r in db.execute("""
+        SELECT ti.symbol_id, ti.sma10, ti.sma20, ti.sma50, ti.sma200
+        FROM technical_indicators ti
+        JOIN (SELECT symbol_id, MAX(ts) mts FROM technical_indicators
+              WHERE timeframe='1d' GROUP BY symbol_id) m
+          ON m.symbol_id = ti.symbol_id AND m.mts = ti.ts
+        WHERE ti.timeframe='1d'"""):
+        ind[r["symbol_id"]] = dict(r)
 
     def ret(closes, n):
         if len(closes) <= n:
@@ -103,6 +121,25 @@ def build_snapshot(api):
         vols = [c[2] for c in closes[-51:-1]]
         avgvol = sum(vols) / len(vols) if vols else None
         g = lambda k, dp=2: round(f[k], dp) if f.get(k) is not None else None
+        window = bars[sid][-CHART_BARS:]
+        # Compact OHLCV: parallel arrays keep the JSON small across ~800 symbols.
+        ohlc = {
+            "t": [b[0][5:] for b in window],                       # MM-DD
+            "o": [round(b[1], 2) for b in window],
+            "h": [round(b[2], 2) for b in window],
+            "l": [round(b[3], 2) for b in window],
+            "c": [round(b[4], 2) for b in window],
+            "v": [int(b[5]) for b in window],
+        }
+        year_bars = [b[4] for b in bars[sid][-252:]]              # 52-week hi/lo
+        ti = ind.get(sid, {})
+        levels = {
+            "sma50": round(ti["sma50"], 2) if ti.get("sma50") else None,
+            "sma200": round(ti["sma200"], 2) if ti.get("sma200") else None,
+            "hi52": round(max(year_bars), 2) if year_bars else None,
+            "lo52": round(min(year_bars), 2) if year_bars else None,
+            "base_hi": g("consolidation_high"), "base_lo": g("consolidation_low"),
+        }
         rows.append({
             "sym": sym, "sector": sector, "themes": sym_themes.get(sym, []),
             "etf": sym in etfs, "close": round(closes[-1][1], 2),
@@ -117,7 +154,20 @@ def build_snapshot(api):
             "qual": f.get("base_qualifies"), "bdist": g("breakout_distance_pct"),
             "cdays": f.get("consolidation_days"),
             "spark": [round(c[1], 2) for c in closes[-64:]],
+            "ohlc": ohlc, "levels": levels,
         })
+
+    # Current relative-strength percentile: the brain defines it as the
+    # cross-sectional percentile rank of the 63-day (3-month) return. We rank the
+    # latest value across the whole universe here so the full expanded universe
+    # gets an RS without recomputing every historical date.
+    ranked = sorted((r for r in rows if r["m3"] is not None), key=lambda r: r["m3"])
+    denom = (len(ranked) - 1) or 1
+    for i, r in enumerate(ranked):
+        r["rs"] = round(i / denom * 100, 1)
+    for r in rows:
+        if r["m3"] is None:
+            r["rs"] = None
 
     def group_rets(members):
         out = {}
