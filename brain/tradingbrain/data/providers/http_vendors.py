@@ -119,8 +119,21 @@ class YahooProvider(HistoricalDataProvider, IntradayDataProvider, OptionsDataPro
         return PriceSeries.from_bars(symbol, timeframe, bars, provider=self.name,
                                      origin=DataOrigin.REAL, adjusted=True)
 
+    # Yahoo silently downsamples `range=max&interval=1d` to monthly/weekly candles;
+    # a bounded range returns true daily bars. Pick the smallest range that covers
+    # the request so the caller still gets every daily bar it asked for.
+    _DAILY_RANGES = (("1y", 366), ("2y", 731), ("5y", 1827), ("10y", 3653))
+
     def daily(self, symbol, start=None, end=None) -> PriceSeries:
-        return self._chart(symbol, Timeframe.D1, "max").between(start, end)
+        rng = "10y"
+        if start is not None:
+            span = (dt.date.today() - start).days if isinstance(start, dt.date) else None
+            if span is not None:
+                for name, days in self._DAILY_RANGES:
+                    if span <= days:
+                        rng = name
+                        break
+        return self._chart(symbol, Timeframe.D1, rng).between(start, end)
 
     def intraday(self, symbol, timeframe, start=None, end=None) -> PriceSeries:
         rng = {"1m": "7d", "5m": "60d", "15m": "60d", "60m": "730d"}[self._INTERVAL[timeframe]]
