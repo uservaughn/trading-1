@@ -1,0 +1,692 @@
+<title>Brain Terminal</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* ============ Brain Terminal — Deepvue-inspired dark terminal ============ */
+/* Deliberately single-theme: a dark trading terminal over a gradient loop.  */
+:root{
+  --ground:#12142a;
+  --panel:rgba(13,15,22,.84);
+  --panel-solid:#101319;
+  --line:rgba(255,255,255,.075);
+  --line-2:rgba(255,255,255,.14);
+  --ink:#e9ecf5;
+  --ink-2:#9aa3b8;
+  --ink-3:#6a7490;
+  --pos:#4d8dff;        /* validated mark blue  */
+  --neg:#e64f95;        /* validated mark pink  */
+  --pos-t:#7dabff;      /* text tint of pos     */
+  --neg-t:#f478b0;      /* text tint of neg     */
+  --amber:#bd8420;      /* validated mark amber */
+  --amber-t:#e8b64c;
+  --radius:14px;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--sans);color:var(--ink);background:var(--ground);
+  min-height:100vh;font-size:14px;line-height:1.45;
+}
+/* ---- the gradient loop ---- */
+.bgwrap{position:fixed;inset:0;z-index:-1;overflow:hidden;background:var(--ground)}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;will-change:transform}
+.blob.b1{width:62vw;height:62vw;left:-14vw;top:-22vw;background:#2447c7;animation:drift1 26s ease-in-out infinite alternate}
+.blob.b2{width:52vw;height:52vw;right:-12vw;top:-8vw;background:#6d28d9;animation:drift2 31s ease-in-out infinite alternate}
+.blob.b3{width:58vw;height:58vw;left:18vw;bottom:-30vw;background:#d6367f;animation:drift3 24s ease-in-out infinite alternate}
+@keyframes drift1{from{transform:translate(0,0) scale(1)}to{transform:translate(9vw,7vh) scale(1.15)}}
+@keyframes drift2{from{transform:translate(0,0) scale(1.1)}to{transform:translate(-8vw,10vh) scale(.92)}}
+@keyframes drift3{from{transform:translate(0,0) scale(1)}to{transform:translate(-10vw,-9vh) scale(1.18)}}
+@media (prefers-reduced-motion:reduce){.blob{animation:none}}
+
+/* ---- chrome ---- */
+.shell{max-width:1240px;margin:0 auto;padding:20px 20px 56px}
+.topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.brand{display:flex;align-items:baseline;gap:9px}
+.brand b{font-size:17px;font-weight:700;letter-spacing:.4px}
+.brand span{font-size:10.5px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase;font-weight:600}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+  font-family:var(--mono);font-size:11px;font-weight:500;border:1px solid var(--line-2);color:var(--ink-2)}
+.pill .dot{width:7px;height:7px;border-radius:50%}
+.pill.bull{color:#8fd0a9;border-color:rgba(110,200,150,.35)}
+.pill.bull .dot{background:#57b57f}
+.pill.bear{color:var(--neg-t);border-color:rgba(230,79,149,.4)}
+.pill.bear .dot{background:var(--neg)}
+.pill.synth{color:var(--amber-t);border-color:rgba(189,132,32,.45);cursor:help}
+.pill.synth .dot{background:var(--amber)}
+.asof{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+nav.tabs{display:flex;gap:4px;margin-bottom:16px;border:1px solid var(--line);border-radius:12px;
+  padding:4px;background:var(--panel);backdrop-filter:blur(14px);width:max-content;max-width:100%;overflow-x:auto}
+nav.tabs button{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink-2);
+  background:none;border:0;border-radius:8px;padding:7px 15px;cursor:pointer;white-space:nowrap}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button.on{background:rgba(77,141,255,.16);color:var(--ink)}
+nav.tabs button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
+  outline:2px solid var(--pos);outline-offset:1px}
+
+/* ---- panels ---- */
+.grid{display:grid;gap:14px}
+.panel{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);
+  border-radius:var(--radius);padding:16px 18px;box-shadow:0 12px 34px rgba(0,0,0,.35)}
+.panel h2{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+.panel h2 .sub{font-weight:500;letter-spacing:0;text-transform:none;color:var(--ink-3);font-size:11px}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.cols2{grid-template-columns:1fr 1fr}
+@media(max-width:880px){.cols2{grid-template-columns:1fr}}
+
+/* ---- numerals ---- */
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+.pos{color:var(--pos-t)}.neg{color:var(--neg-t)}.flat{color:var(--ink-2)}
+.big{font-size:24px;font-weight:600;letter-spacing:-.01em}
+.chip{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;
+  padding:2px 7px;border-radius:6px}
+.chip.pos{background:rgba(77,141,255,.15)}
+.chip.neg{background:rgba(230,79,149,.15)}
+.chip.flat{background:rgba(255,255,255,.06)}
+
+/* ---- index tiles ---- */
+.tile .row1{display:flex;align-items:baseline;gap:10px}
+.tile .sym{font-weight:700;font-size:15px}
+.tile canvas{width:100%;height:56px;display:block;margin-top:10px}
+.tile .meta{display:flex;gap:14px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+
+/* ---- tracker bars ---- */
+.seg{display:inline-flex;gap:2px;background:rgba(255,255,255,.05);border:1px solid var(--line);
+  border-radius:8px;padding:2px;margin-left:auto}
+.seg button{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink-3);
+  background:none;border:0;border-radius:6px;padding:3px 9px;cursor:pointer}
+.seg button.on{background:rgba(77,141,255,.2);color:var(--ink)}
+.trk{display:flex;flex-direction:column;gap:2px}
+.trow{display:grid;grid-template-columns:128px 1fr 58px;align-items:center;gap:10px;
+  padding:2.5px 6px;border-radius:7px;cursor:default}
+.trow:hover{background:rgba(255,255,255,.045)}
+.trow .lbl{font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .barbox{position:relative;height:13px}
+.trow .bar{position:absolute;top:0;bottom:0;border-radius:0 4px 4px 0;min-width:2px}
+.trow .bar.p{background:var(--pos)}
+.trow .bar.n{background:var(--neg)}
+.trow .val{text-align:right}
+
+/* ---- tables ---- */
+.twrap{overflow-x:auto;margin:0 -6px;padding:0 6px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);text-align:right;padding:7px 9px;border-bottom:1px solid var(--line-2);
+  white-space:nowrap;cursor:pointer;user-select:none}
+th.l,td.l{text-align:left}
+th:hover{color:var(--ink-2)}
+th .arr{color:var(--pos-t)}
+td{padding:6.5px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+tbody tr:hover{background:rgba(255,255,255,.045)}
+tbody tr{cursor:pointer}
+tbody tr:last-child td{border-bottom:0}
+td .sym{font-weight:700;font-size:12.5px}
+td .sect{color:var(--ink-3);font-size:11px}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.12)}
+.dots i.on{background:var(--pos)}
+.count{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:10px}
+
+/* ---- toolbar ---- */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input[type=text],.toolbar input[type=number],.toolbar select{
+  font-family:var(--mono);font-size:12px;color:var(--ink);background:rgba(255,255,255,.055);
+  border:1px solid var(--line-2);border-radius:8px;padding:6px 10px}
+.toolbar input[type=text]{width:150px}
+.toolbar input[type=number]{width:74px}
+.toolbar input::placeholder{color:var(--ink-3)}
+.toolbar label.ck{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--ink-2);cursor:pointer}
+.toolbar select{cursor:pointer}
+.toolbar .reset{font-size:11.5px;color:var(--ink-3);background:none;border:0;cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px}
+.toolbar .reset:hover{color:var(--ink-2)}
+
+/* ---- drawer ---- */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);z-index:40;
+  background:rgba(11,13,19,.97);border-left:1px solid var(--line-2);padding:20px 22px;
+  overflow-y:auto;transform:translateX(102%);transition:transform .22s ease}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+.drawer.open{transform:none}
+.drawer .close{position:absolute;top:14px;right:14px;background:none;border:1px solid var(--line-2);
+  color:var(--ink-2);border-radius:8px;font-size:13px;padding:3px 10px;cursor:pointer}
+.drawer h3{margin:2px 0 2px;font-size:22px}
+.drawer .dsub{color:var(--ink-3);font-size:12px;margin-bottom:12px}
+.drawer canvas{width:100%;height:110px;display:block;margin:10px 0 4px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:12.5px;margin-top:12px}
+.kv .k{color:var(--ink-2)}
+.kv .v{font-family:var(--mono);text-align:right}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.tag{font-size:11px;color:var(--ink-2);border:1px solid var(--line-2);border-radius:999px;padding:2px 9px}
+
+/* ---- scanner ---- */
+.cands{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.cand .chead{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.cand .chead .sym{font-size:17px;font-weight:700}
+.cand .chead .score{margin-left:auto;font-family:var(--mono);font-size:19px;font-weight:600;color:var(--pos-t)}
+.comp{display:grid;grid-template-columns:118px 1fr 34px;gap:8px;align-items:center;
+  font-size:11px;color:var(--ink-2);padding:2px 0}
+.comp .cb{height:8px;border-radius:0 3px 3px 0;background:var(--pos);min-width:2px;opacity:.85}
+.comp .cv{font-family:var(--mono);text-align:right;color:var(--ink-2)}
+.statebadge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 8px;border-radius:6px;
+  background:rgba(232,182,76,.13);color:var(--amber-t)}
+.statebadge.breakout{background:rgba(77,141,255,.16);color:var(--pos-t)}
+
+/* ---- research ---- */
+.hyp{border-bottom:1px solid var(--line);padding:10px 2px}
+.hyp:last-child{border-bottom:0}
+.hyp .q{font-weight:600;font-size:13.5px}
+.hyp .s{color:var(--ink-2);font-size:12.5px;margin-top:2px}
+.hyp .hmeta{display:flex;gap:8px;margin-top:6px}
+.badge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;
+  padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.07);color:var(--ink-2)}
+.badge.open{background:rgba(77,141,255,.14);color:var(--pos-t)}
+.note{font-size:12px;color:var(--ink-3);line-height:1.55;margin-top:10px}
+
+/* ---- stat tiles ---- */
+.stat .v{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.02em}
+.stat .k{font-size:11px;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+.meter{height:7px;border-radius:4px;background:rgba(255,255,255,.08);margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--pos);border-radius:4px}
+
+/* ---- tooltip ---- */
+#tip{position:fixed;z-index:60;pointer-events:none;background:#0b0d13;border:1px solid var(--line-2);
+  border-radius:10px;padding:9px 12px;font-size:11.5px;box-shadow:0 10px 28px rgba(0,0,0,.5);
+  max-width:280px;display:none}
+#tip .th{font-weight:700;font-size:12.5px;margin-bottom:5px}
+#tip .tr{display:flex;justify-content:space-between;gap:16px;font-family:var(--mono);padding:1px 0}
+#tip .tr span:first-child{color:var(--ink-2);font-family:var(--sans)}
+.footer{margin-top:22px;font-size:11.5px;color:var(--ink-3);line-height:1.6}
+.footer b{color:var(--ink-2)}
+</style>
+
+<div class="bgwrap"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<div id="tip"></div>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><b>BRAIN TERMINAL</b><span>AI Trading Brain</span></div>
+    <span class="spacer"></span>
+    <span id="regimepill"></span>
+    <span id="synthpill"></span>
+    <span class="asof" id="asof"></span>
+  </header>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="view"></main>
+  <div class="drawer" id="drawer"></div>
+</div>
+
+<script>
+const SNAP = __SNAPSHOT_JSON__;
+
+/* ---------------- utilities ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('bt.'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k, v){ try{ localStorage.setItem('bt.'+k, JSON.stringify(v)); }catch(e){} },
+};
+function fmtPct(v, signed=true){
+  if(v===null||v===undefined) return '<span class="num flat">—</span>';
+  const cls = v>0.004?'pos':(v<-0.004?'neg':'flat');
+  const s = (signed&&v>0?'+':'')+v.toFixed(2)+'%';
+  return `<span class="num ${cls}">${s}</span>`;
+}
+function fmtNum(v, dp=2){
+  if(v===null||v===undefined) return '<span class="num flat">—</span>';
+  return `<span class="num">${Number(v).toFixed(dp)}</span>`;
+}
+function chip(v){
+  if(v===null||v===undefined) return '<span class="chip flat">—</span>';
+  const cls = v>0.004?'pos':(v<-0.004?'neg':'flat');
+  return `<span class="chip ${cls} num">${v>0?'+':''}${v.toFixed(2)}%</span>`;
+}
+const TF = [['d1','Today'],['w1','1W'],['m1','1M'],['m3','3M'],['ytd','YTD']];
+
+/* ---------------- tooltip ---------------- */
+const tip = $('#tip');
+function showTip(html, x, y){
+  tip.innerHTML = html; tip.style.display='block';
+  const r = tip.getBoundingClientRect();
+  let left = x+14, top = y+14;
+  if(left + r.width > innerWidth-8) left = x - r.width - 12;
+  if(top + r.height > innerHeight-8) top = y - r.height - 12;
+  tip.style.left = left+'px'; tip.style.top = top+'px';
+}
+function hideTip(){ tip.style.display='none'; }
+
+/* ---------------- sparklines ---------------- */
+function drawSpark(canvas, values, opts={}){
+  const dpr = devicePixelRatio||1;
+  const w = canvas.clientWidth||260, h = canvas.clientHeight||56;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  if(!values || values.length<2) return;
+  const min = Math.min(...values), max = Math.max(...values), span = (max-min)||1;
+  const pad = 3;
+  const X = i => pad + i*(w-2*pad)/(values.length-1);
+  const Y = v => h-pad - (v-min)*(h-2*pad)/span;
+  const up = values[values.length-1] >= values[0];
+  const col = up ? '#4d8dff' : '#e64f95';
+  // area fill
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, up?'rgba(77,141,255,.22)':'rgba(230,79,149,.22)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.moveTo(X(0), Y(values[0]));
+  values.forEach((v,i)=>ctx.lineTo(X(i),Y(v)));
+  ctx.lineTo(X(values.length-1),h); ctx.lineTo(X(0),h); ctx.closePath();
+  ctx.fillStyle=g; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.moveTo(X(0), Y(values[0]));
+  values.forEach((v,i)=>ctx.lineTo(X(i),Y(v)));
+  ctx.strokeStyle=col; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  // endpoint
+  ctx.beginPath(); ctx.arc(X(values.length-1), Y(values[values.length-1]), 3, 0, 7);
+  ctx.fillStyle=col; ctx.fill();
+  ctx.strokeStyle='#101319'; ctx.lineWidth=2; ctx.stroke();
+  canvas._geom = {X, Y, values, dates:opts.dates||null, w, h};
+}
+function sparkHover(canvas, name){
+  canvas.addEventListener('mousemove', e=>{
+    const g = canvas._geom; if(!g) return;
+    const r = canvas.getBoundingClientRect();
+    const i = Math.max(0, Math.min(g.values.length-1,
+      Math.round((e.clientX-r.left-3)/(r.width-6)*(g.values.length-1))));
+    const v = g.values[i];
+    const when = g.dates ? g.dates[i] : `${g.values.length-1-i} bars ago`;
+    showTip(`<div class="th">${esc(name)}</div>
+      <div class="tr"><span>${esc(when)}</span><span>${v.toFixed(2)}</span></div>`, e.clientX, e.clientY);
+  });
+  canvas.addEventListener('mouseleave', hideTip);
+}
+
+/* ---------------- topbar ---------------- */
+{
+  const r = SNAP.regime;
+  const cls = r.label==='BULL'?'bull':(r.label==='BEAR'?'bear':'');
+  $('#regimepill').outerHTML =
+    `<span class="pill ${cls}"><span class="dot"></span>${esc(r.label)} · ${esc(r.volatility_label)} VOL · ${r.strength.toFixed(0)}</span>`;
+  if(SNAP.data_origin==='SYNTHETIC'){
+    $('#synthpill').outerHTML =
+      `<span class="pill synth" title="${esc(SNAP.data_note||'')}"><span class="dot"></span>SYNTHETIC DATA</span>`;
+  }
+  $('#asof').textContent = 'as of '+SNAP.as_of+' · built '+SNAP.generated_at.slice(0,16).replace('T',' ')+'Z';
+}
+
+/* ---------------- router ---------------- */
+const VIEWS = [['overview','Overview'],['screener','Screener'],['themes','Themes'],
+               ['scanner','Scanner'],['research','Research']];
+const tabs = $('#tabs');
+tabs.innerHTML = VIEWS.map(([k,l])=>`<button data-v="${k}">${l}</button>`).join('');
+tabs.addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  location.hash = '#/'+b.dataset.v;
+});
+function route(){
+  let v = (location.hash.replace(/^#\//,'')||store.get('tab','overview'));
+  if(!VIEWS.some(([k])=>k===v)) v = 'overview';
+  store.set('tab', v);
+  tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  closeDrawer();
+  RENDER[v]();
+}
+addEventListener('hashchange', route);
+
+/* ---------------- tracker panel ---------------- */
+function trackerPanel(id, title, groups){
+  const tf = store.get('tf.'+id, 'd1');
+  const seg = TF.map(([k,l])=>`<button data-tf="${k}" class="${k===tf?'on':''}">${l}</button>`).join('');
+  return `<section class="panel">
+    <h2>${title}<span class="sub">equal-weight member return</span>
+      <span class="seg" data-trk="${id}">${seg}</span></h2>
+    <div class="trk" id="trk-${id}"></div>
+  </section>`;
+}
+function fillTracker(id, groups){
+  const tf = store.get('tf.'+id, 'd1');
+  const rows = groups.slice().sort((a,b)=>(b.rets[tf]??-1e9)-(a.rets[tf]??-1e9));
+  const maxAbs = Math.max(...rows.map(g=>Math.abs(g.rets[tf]??0)), .01);
+  $('#trk-'+id).innerHTML = rows.map(g=>{
+    const v = g.rets[tf];
+    const wpct = v===null?0:Math.max(1.5, Math.abs(v)/maxAbs*100);
+    const cls = (v??0)>=0?'p':'n';
+    return `<div class="trow" data-g="${esc(g.name)}">
+      <span class="lbl">${esc(g.name)}</span>
+      <span class="barbox"><span class="bar ${cls}" style="width:${wpct}%"></span></span>
+      <span class="val">${fmtPct(v)}</span></div>`;
+  }).join('');
+  $('#trk-'+id).querySelectorAll('.trow').forEach(el=>{
+    const g = groups.find(x=>x.name===el.dataset.g);
+    el.addEventListener('mousemove', e=>{
+      showTip(`<div class="th">${esc(g.name)} <span style="color:var(--ink-3)">· rank ${g.rank} · score ${g.score.toFixed(0)}</span></div>`
+        + TF.map(([k,l])=>`<div class="tr"><span>${l}</span><span>${g.rets[k]===null?'—':(g.rets[k]>0?'+':'')+g.rets[k].toFixed(2)+'%'}</span></div>`).join('')
+        + `<div class="tr"><span>&gt; 50 SMA</span><span>${g.pct_above_50.toFixed(0)}%</span></div>`
+        + `<div class="tr"><span>leaders</span><span>${g.leaders.slice(0,3).map(l=>l.symbol).join(' ')}</span></div>`,
+        e.clientX, e.clientY);
+    });
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+function bindTrackerSegs(){
+  document.querySelectorAll('.seg[data-trk]').forEach(seg=>{
+    seg.addEventListener('click', e=>{
+      const b = e.target.closest('button'); if(!b) return;
+      store.set('tf.'+seg.dataset.trk, b.dataset.tf);
+      seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
+      fillTracker(seg.dataset.trk, seg.dataset.trk==='themes'?SNAP.themes:SNAP.sectors);
+    });
+  });
+}
+
+/* ---------------- overview ---------------- */
+const RENDER = {};
+RENDER.overview = function(){
+  const b = SNAP.regime.breadth, sc = SNAP.scan;
+  const idx = Object.entries(SNAP.indexes);
+  $('#view').innerHTML = `
+  <div class="grid tiles" style="margin-bottom:14px">
+    ${idx.map(([s,d])=>`
+      <section class="panel tile">
+        <div class="row1"><span class="sym">${s}</span>
+          <span class="num big">${d.close.toFixed(2)}</span>${chip(d.d1)}</div>
+        <canvas data-spark="${s}"></canvas>
+        <div class="meta"><span>YTD ${d.ytd===null?'—':(d.ytd>0?'+':'')+d.ytd.toFixed(1)+'%'}</span>
+          <span>DD ${d.dd.toFixed(1)}%</span><span>VOL ${d.vol.toFixed(0)}%</span></div>
+      </section>`).join('')}
+    <section class="panel stat">
+      <h2>Market regime</h2>
+      <div class="v">${esc(SNAP.regime.label)}</div>
+      <div class="k">${esc(SNAP.regime.volatility_label)} volatility · strength ${SNAP.regime.strength.toFixed(0)}/100</div>
+      <div class="meter"><i style="width:${SNAP.regime.strength.toFixed(0)}%"></i></div>
+      <div class="meta" style="display:flex;gap:14px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--ink-3)">
+        <span>&gt;50SMA ${b.pct_above_50sma}%</span><span>&gt;200SMA ${b.pct_above_200sma}%</span>
+        <span>near hi ${b.pct_within_2pct_of_52w_high??'—'}%</span></div>
+    </section>
+    <section class="panel stat">
+      <h2>Scanner</h2>
+      <div class="v">${sc.candidates_found}<span style="font-size:14px;color:var(--ink-3)"> / ${sc.symbols_scanned}</span></div>
+      <div class="k">${sc.breakouts_today} breakout · ${sc.approaching} approaching</div>
+      <div class="note" style="margin-top:8px">${esc(sc.strategy)}</div>
+    </section>
+  </div>
+  <div class="grid cols2" style="margin-bottom:14px">
+    ${trackerPanel('themes','Theme tracker')}
+    ${trackerPanel('sectors','Sector tracker')}
+  </div>
+  <section class="panel">
+    <h2>Relative-strength leaders<span class="sub">top 15 non-ETF by RS percentile</span></h2>
+    <div class="twrap"><table id="leaders"><thead><tr>
+      <th class="l">Symbol</th><th>Close</th><th>Today</th><th>1M</th><th>3M</th><th>RS %ile</th><th>vs 52w hi</th><th class="l" style="cursor:default">3M trend</th>
+    </tr></thead><tbody>${
+      SNAP.rows.filter(r=>!r.etf && r.rs!==null).sort((a,b)=>b.rs-a.rs).slice(0,15).map(r=>`
+      <tr data-sym="${r.sym}"><td class="l"><span class="sym">${r.sym}</span> <span class="sect">${esc(r.sector)}</span></td>
+        <td>${fmtNum(r.close)}</td><td>${fmtPct(r.d1)}</td><td>${fmtPct(r.m1)}</td><td>${fmtPct(r.m3)}</td>
+        <td><span class="num">${r.rs.toFixed(1)}</span></td><td>${fmtPct(r.p52,false)}</td>
+        <td class="l"><canvas style="width:90px;height:24px" data-rowspark="${r.sym}"></canvas></td></tr>`).join('')
+    }</tbody></table></div>
+  </section>`;
+  idx.forEach(([s,d])=>{
+    const c = document.querySelector(`canvas[data-spark="${s}"]`);
+    drawSpark(c, d.spark.map(p=>p[1]), {dates: d.spark.map(p=>p[0])});
+    sparkHover(c, s);
+  });
+  document.querySelectorAll('canvas[data-rowspark]').forEach(c=>{
+    const r = SNAP.rows.find(x=>x.sym===c.dataset.rowspark);
+    drawSpark(c, r.spark);
+  });
+  $('#leaders tbody').addEventListener('click', e=>{
+    const tr = e.target.closest('tr[data-sym]'); if(tr) openDrawer(tr.dataset.sym);
+  });
+  fillTracker('themes', SNAP.themes); fillTracker('sectors', SNAP.sectors);
+  bindTrackerSegs();
+};
+
+/* ---------------- screener ---------------- */
+const COLS = [
+  ['sym','Symbol','l'], ['close','Close'], ['d1','Today'], ['w1','1W'], ['m1','1M'],
+  ['m3','3M'], ['m6','6M'], ['ytd','YTD'], ['rvol','RVOL'], ['rs','RS %ile'],
+  ['p52','vs 52w hi'], ['adr','ADR%'], ['dvol','$Vol 20d (M)'], ['stack','Trend'], ['baseq','Base Q'],
+];
+const FDEF = {q:'', sector:'', theme:'', above50:false, noetf:false, minrs:''};
+RENDER.screener = function(){
+  const f = Object.assign({}, FDEF, store.get('flt', {}));
+  const sectors = [...new Set(SNAP.rows.map(r=>r.sector))].sort();
+  const themes = SNAP.themes.map(t=>t.name).sort();
+  $('#view').innerHTML = `
+  <section class="panel">
+    <h2>Screener<span class="sub">${SNAP.rows.length} symbols · precomputed features · as of ${SNAP.as_of}</span></h2>
+    <div class="toolbar">
+      <input type="text" id="f-q" placeholder="filter symbols…" value="${esc(f.q)}">
+      <select id="f-sector"><option value="">All sectors</option>${sectors.map(s=>`<option ${f.sector===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="f-theme"><option value="">All themes</option>${themes.map(s=>`<option ${f.theme===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <input type="number" id="f-minrs" placeholder="min RS" min="0" max="100" value="${esc(f.minrs)}">
+      <label class="ck"><input type="checkbox" id="f-above50" ${f.above50?'checked':''}> above 50 SMA</label>
+      <label class="ck"><input type="checkbox" id="f-noetf" ${f.noetf?'checked':''}> hide ETFs</label>
+      <button class="reset" id="f-reset">reset</button>
+    </div>
+    <div class="twrap"><table id="scr"><thead><tr>${
+      COLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}">${l}<span class="arr" data-arr="${k}"></span></th>`).join('')
+    }</tr></thead><tbody></tbody></table></div>
+    <div class="count" id="scr-count"></div>
+  </section>`;
+  const sort = store.get('sort', {k:'rs', dir:-1});
+  function apply(){
+    const f = Object.assign({}, FDEF, store.get('flt', {}));
+    let rows = SNAP.rows.filter(r=>
+      (!f.q || r.sym.toUpperCase().includes(f.q.toUpperCase())) &&
+      (!f.sector || r.sector===f.sector) &&
+      (!f.theme || r.themes.includes(f.theme)) &&
+      (!f.above50 || r.a50) && (!f.noetf || !r.etf) &&
+      (f.minrs==='' || (r.rs!==null && r.rs>=+f.minrs)));
+    const {k, dir} = store.get('sort', sort);
+    rows.sort((a,b)=>{
+      const x=a[k], y=b[k];
+      if(x===null||x===undefined) return 1; if(y===null||y===undefined) return -1;
+      return (typeof x==='string' ? x.localeCompare(y) : x-y) * dir;
+    });
+    document.querySelectorAll('[data-arr]').forEach(s=>s.textContent = s.dataset.arr===k?(dir<0?' ▾':' ▴'):'');
+    $('#scr tbody').innerHTML = rows.map(r=>`
+      <tr data-sym="${r.sym}">
+        <td class="l"><span class="sym">${r.sym}</span> <span class="sect">${esc(r.sector)}</span></td>
+        <td>${fmtNum(r.close)}</td><td>${fmtPct(r.d1)}</td><td>${fmtPct(r.w1)}</td>
+        <td>${fmtPct(r.m1)}</td><td>${fmtPct(r.m3)}</td><td>${fmtPct(r.m6)}</td><td>${fmtPct(r.ytd)}</td>
+        <td>${fmtNum(r.rvol)}</td><td>${r.rs===null?'<span class="num flat">—</span>':`<span class="num">${r.rs.toFixed(1)}</span>`}</td>
+        <td>${fmtPct(r.p52,false)}</td><td>${fmtNum(r.adr)}</td><td>${fmtNum(r.dvol,1)}</td>
+        <td><span class="dots" title="above 10 / 20 / 50 / 200 SMA">${[r.a10,r.a20,r.a50,r.a200].map(x=>`<i class="${x?'on':''}"></i>`).join('')}</span></td>
+        <td>${r.baseq===null?'<span class="num flat">—</span>':`<span class="num ${r.qual?'pos':''}">${r.baseq.toFixed(2)}</span>`}</td>
+      </tr>`).join('');
+    $('#scr-count').textContent = `${rows.length} of ${SNAP.rows.length} symbols`;
+  }
+  function saveFlt(){
+    store.set('flt', {q:$('#f-q').value, sector:$('#f-sector').value, theme:$('#f-theme').value,
+      above50:$('#f-above50').checked, noetf:$('#f-noetf').checked, minrs:$('#f-minrs').value});
+    apply();
+  }
+  ['f-q','f-minrs'].forEach(id=>$('#'+id).addEventListener('input', saveFlt));
+  ['f-sector','f-theme','f-above50','f-noetf'].forEach(id=>$('#'+id).addEventListener('change', saveFlt));
+  $('#f-reset').addEventListener('click', ()=>{ store.set('flt', FDEF); RENDER.screener(); });
+  $('#scr thead').addEventListener('click', e=>{
+    const th = e.target.closest('th[data-k]'); if(!th) return;
+    const cur = store.get('sort', sort);
+    store.set('sort', {k:th.dataset.k, dir: cur.k===th.dataset.k? -cur.dir : -1});
+    apply();
+  });
+  $('#scr tbody').addEventListener('click', e=>{
+    const tr = e.target.closest('tr[data-sym]'); if(tr) openDrawer(tr.dataset.sym);
+  });
+  apply();
+};
+
+/* ---------------- themes ---------------- */
+RENDER.themes = function(){
+  const sel = store.get('themeSel', null);
+  $('#view').innerHTML = `
+  <section class="panel" style="margin-bottom:14px">
+    <h2>Theme rankings<span class="sub">score = composite percentile of six components · as of ${SNAP.as_of}</span></h2>
+    <div class="twrap"><table id="thm"><thead><tr>
+      <th class="l" style="cursor:default">#</th><th class="l" style="cursor:default">Theme</th>
+      <th style="cursor:default">Score</th>${TF.map(([k,l])=>`<th style="cursor:default">${l}</th>`).join('')}
+      <th style="cursor:default">&gt;50SMA</th><th style="cursor:default">near hi</th><th class="l" style="cursor:default">Leaders</th>
+    </tr></thead><tbody>${
+      SNAP.themes.map(t=>`
+      <tr data-th="${esc(t.name)}"><td class="l"><span class="num">${t.rank}</span></td>
+        <td class="l" style="font-weight:600">${esc(t.name)}</td>
+        <td><span class="num">${t.score.toFixed(1)}</span></td>
+        ${TF.map(([k])=>`<td>${fmtPct(t.rets[k])}</td>`).join('')}
+        <td><span class="num">${t.pct_above_50.toFixed(0)}%</span></td>
+        <td><span class="num">${t.pct_near_hi.toFixed(0)}%</span></td>
+        <td class="l"><span class="sect">${t.leaders.slice(0,3).map(l=>l.symbol).join(' · ')}</span></td></tr>`).join('')
+    }</tbody></table></div>
+  </section>
+  <div id="thm-members"></div>`;
+  function fillMembers(name){
+    const t = SNAP.themes.find(x=>x.name===name);
+    if(!t){ $('#thm-members').innerHTML=''; return; }
+    const rows = SNAP.rows.filter(r=>t.members.includes(r.sym));
+    $('#thm-members').innerHTML = `<section class="panel">
+      <h2>${esc(name)} — members<span class="sub">${rows.length} with data</span></h2>
+      <div class="twrap"><table><thead><tr>
+        <th class="l" style="cursor:default">Symbol</th><th style="cursor:default">Close</th><th style="cursor:default">Today</th>
+        <th style="cursor:default">1M</th><th style="cursor:default">3M</th><th style="cursor:default">RS %ile</th>
+        <th style="cursor:default">vs 52w hi</th><th class="l" style="cursor:default">3M trend</th></tr></thead><tbody>${
+        rows.sort((a,b)=>(b.rs??-1)-(a.rs??-1)).map(r=>`
+        <tr data-sym="${r.sym}"><td class="l"><span class="sym">${r.sym}</span> <span class="sect">${esc(r.sector)}</span></td>
+          <td>${fmtNum(r.close)}</td><td>${fmtPct(r.d1)}</td><td>${fmtPct(r.m1)}</td><td>${fmtPct(r.m3)}</td>
+          <td>${r.rs===null?'—':`<span class="num">${r.rs.toFixed(1)}</span>`}</td><td>${fmtPct(r.p52,false)}</td>
+          <td class="l"><canvas style="width:90px;height:24px" data-mspark="${r.sym}"></canvas></td></tr>`).join('')
+      }</tbody></table></div></section>`;
+    document.querySelectorAll('canvas[data-mspark]').forEach(c=>{
+      drawSpark(c, SNAP.rows.find(x=>x.sym===c.dataset.mspark).spark);
+    });
+    $('#thm-members tbody').addEventListener('click', e=>{
+      const tr = e.target.closest('tr[data-sym]'); if(tr) openDrawer(tr.dataset.sym);
+    });
+  }
+  $('#thm tbody').addEventListener('click', e=>{
+    const tr = e.target.closest('tr[data-th]'); if(!tr) return;
+    store.set('themeSel', tr.dataset.th); fillMembers(tr.dataset.th);
+  });
+  if(sel) fillMembers(sel);
+};
+
+/* ---------------- scanner ---------------- */
+RENDER.scanner = function(){
+  const sc = SNAP.scan;
+  $('#view').innerHTML = `
+  <section class="panel" style="margin-bottom:14px">
+    <h2>${esc(sc.strategy)}<span class="sub">scanned ${sc.symbols_scanned} · ${sc.breakouts_today} breakout today · ${sc.approaching} approaching · as of ${sc.as_of}</span></h2>
+    <div class="comp" style="grid-template-columns:150px 1fr 40px">${
+      Object.entries(sc.weights).map(([k,w])=>`
+        <span>${esc(k.replace(/_/g,' '))}</span>
+        <span class="cb" style="width:${(w*100/0.15*0.9).toFixed(0)}%;max-width:100%"></span>
+        <span class="cv">${(w*100).toFixed(0)}%</span>`).join('')
+    }</div>
+  </section>
+  <div class="grid cands">${
+    sc.candidates.map(c=>{
+      const d = c.detail && c.detail.setup ? c.detail.setup : {};
+      return `<section class="panel cand">
+      <div class="chead"><span class="sym">${esc(c.symbol)}</span>
+        <span class="statebadge ${c.state==='breakout'?'breakout':''}">${esc(c.state)}</span>
+        <span class="score">${c.score.toFixed(0)}</span></div>
+      ${Object.entries(c.components).map(([k,v])=>`
+        <div class="comp"><span>${esc(k.replace(/_/g,' '))}</span>
+          <span class="cb" style="width:${Math.max(1,v.score).toFixed(0)}%"></span>
+          <span class="cv">${v.score.toFixed(0)}</span></div>`).join('')}
+      <div class="kv" style="margin-top:12px">
+        <span class="k">prior move</span><span class="v">${d.prior_move_pct!==undefined?'+'+d.prior_move_pct.toFixed(1)+'% / '+d.prior_move_bars+' bars':'—'}</span>
+        <span class="k">base</span><span class="v">${d.base_length!==undefined?d.base_length+' bars · depth '+d.base_depth_pct.toFixed(1)+'%':'—'}</span>
+        <span class="k">base quality</span><span class="v">${d.base_quality!==undefined?d.base_quality.toFixed(2):'—'}</span>
+        <span class="k">breakout level</span><span class="v">${d.breakout_level!==undefined?d.breakout_level.toFixed(2):'—'}</span>
+        <span class="k">RS percentile</span><span class="v">${d.rs_percentile!==undefined?d.rs_percentile.toFixed(1):'—'}</span>
+        <span class="k">RVOL</span><span class="v">${d.rvol!==undefined?d.rvol.toFixed(2):'—'}</span>
+      </div>
+      </section>`;}).join('')
+  }</div>
+  ${sc.candidates.length===0?'<section class="panel"><div class="note">No candidates in today\'s scan.</div></section>':''}`;
+};
+
+/* ---------------- research ---------------- */
+RENDER.research = function(){
+  const g = SNAP.guards, hyps = SNAP.research.active_hypotheses||[];
+  $('#view').innerHTML = `
+  <div class="grid cols2">
+    <section class="panel">
+      <h2>Open hypotheses<span class="sub">${hyps.length} in the lab</span></h2>
+      ${hyps.map(h=>`<div class="hyp">
+        <div class="q">${esc(h.question)}</div>
+        <div class="s">${esc(h.statement)}</div>
+        <div class="hmeta"><span class="badge open">${esc(h.status)}</span>
+          <span class="badge">${esc(h.category)}</span>
+          ${h.spec&&h.spec.horizon?`<span class="badge">horizon ${h.spec.horizon}d</span>`:''}</div>
+      </div>`).join('') || '<div class="note">No open hypotheses.</div>'}
+    </section>
+    <div class="grid" style="align-content:start">
+      <section class="panel">
+        <h2>Risk guards</h2>
+        <div class="kv">
+          <span class="k">Mode</span><span class="v">${esc(g.mode)}</span>
+          <span class="k">Live trading</span><span class="v">${g.live_trading_enabled?'ENABLED':'disabled'}</span>
+          <span class="k">Kill switch</span><span class="v">${g.kill_switch_engaged?'ENGAGED':'off'}</span>
+          <span class="k">Max daily loss</span><span class="v">${g.max_daily_loss_pct}%</span>
+          <span class="k">Max position</span><span class="v">${g.max_position_pct}%</span>
+          <span class="k">Max exposure</span><span class="v">${g.max_portfolio_exposure_pct}%</span>
+          <span class="k">Max order notional</span><span class="v">$${g.max_order_notional.toLocaleString()}</span>
+        </div>
+        <div class="note">${esc(g.note||'')}</div>
+      </section>
+      <section class="panel">
+        <h2>Data provenance</h2>
+        <div class="note">${esc(SNAP.data_note||'')}</div>
+        <div class="note">Every number the Brain reports carries an evidence class
+        (<b>SOURCE_FACT · INFERENCE · HYPOTHESIS · BACKTEST_RESULT · LIVE_MARKET_OBSERVATION · MODEL_ESTIMATE</b>)
+        and no number changes class silently. This page is a snapshot of those outputs,
+        not a signal service.</div>
+      </section>
+    </div>
+  </div>`;
+};
+
+/* ---------------- drawer ---------------- */
+function openDrawer(sym){
+  const r = SNAP.rows.find(x=>x.sym===sym); if(!r) return;
+  const cand = SNAP.scan.candidates.find(c=>c.symbol===sym);
+  const d = $('#drawer');
+  d.innerHTML = `
+    <button class="close" id="dclose">close ✕</button>
+    <h3>${r.sym}</h3>
+    <div class="dsub">${esc(r.sector)}${r.etf?' · ETF':''}</div>
+    <div><span class="num big">${r.close.toFixed(2)}</span> ${chip(r.d1)}</div>
+    <canvas id="dspark"></canvas>
+    <div class="dsub" style="font-family:var(--mono);font-size:10.5px">last ${r.spark.length} sessions</div>
+    <div class="kv">
+      <span class="k">1 week</span><span class="v">${r.w1===null?'—':(r.w1>0?'+':'')+r.w1.toFixed(2)+'%'}</span>
+      <span class="k">1 month</span><span class="v">${r.m1===null?'—':(r.m1>0?'+':'')+r.m1.toFixed(2)+'%'}</span>
+      <span class="k">3 months</span><span class="v">${r.m3===null?'—':(r.m3>0?'+':'')+r.m3.toFixed(2)+'%'}</span>
+      <span class="k">6 months</span><span class="v">${r.m6===null?'—':(r.m6>0?'+':'')+r.m6.toFixed(2)+'%'}</span>
+      <span class="k">YTD</span><span class="v">${r.ytd===null?'—':(r.ytd>0?'+':'')+r.ytd.toFixed(2)+'%'}</span>
+      <span class="k">RS percentile</span><span class="v">${r.rs===null?'—':r.rs.toFixed(1)}</span>
+      <span class="k">vs 52-week high</span><span class="v">${r.p52===null?'—':r.p52.toFixed(1)+'%'}</span>
+      <span class="k">Relative volume</span><span class="v">${r.rvol===null?'—':r.rvol.toFixed(2)}</span>
+      <span class="k">ADR (20d)</span><span class="v">${r.adr===null?'—':r.adr.toFixed(2)+'%'}</span>
+      <span class="k">$ volume (20d)</span><span class="v">${r.dvol}M</span>
+      <span class="k">Above 10/20/50/200</span><span class="v">${[r.a10,r.a20,r.a50,r.a200].map(x=>x?'●':'○').join(' ')}</span>
+      <span class="k">10&gt;20&gt;50 stack</span><span class="v">${r.stack?'yes':'no'}</span>
+      <span class="k">Consolidation</span><span class="v">${r.cdays??'—'} bars</span>
+      <span class="k">Base quality</span><span class="v">${r.baseq===null?'—':r.baseq.toFixed(2)+(r.qual?' ✓':'')}</span>
+      <span class="k">To breakout level</span><span class="v">${r.bdist===null?'—':r.bdist.toFixed(2)+'%'}</span>
+      ${cand?`<span class="k">Scanner score</span><span class="v" style="color:var(--pos-t)">${cand.score.toFixed(0)} · ${esc(cand.state)}</span>`:''}
+    </div>
+    ${r.themes.length?`<div class="tagrow">${r.themes.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}`;
+  d.classList.add('open');
+  drawSpark($('#dspark'), r.spark);
+  sparkHover($('#dspark'), r.sym);
+  $('#dclose').addEventListener('click', closeDrawer);
+}
+function closeDrawer(){ $('#drawer').classList.remove('open'); }
+addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
+
+route();
+</script>
