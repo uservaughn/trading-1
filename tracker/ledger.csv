@@ -1,0 +1,9 @@
+date,engine,type,description,amount
+2026-07-08,setup,expense,Claude Pro subscription (build/ops tooling),-20.00
+2026-07-08,setup,expense,Instagram/Meta verification (outreach deliverability),-20.00
+2026-07-09,setup,expense,domain blankd.online,-2.00
+2026-07-10,flips,expense,Jagermeister mini fridge (FB Marketplace - negotiated 300 to 140),-140.00
+2026-07-30,flips,revenue,Jagermeister mini fridge SOLD (bought 140 / sold 200),200.00
+# 2026-07-30: boss owns 1 share META (entry 557.72, now 588.88 = +$31.16 unrealized).
+# Portfolio $634.48 total. The $2,000 is NO LONGER available to the business.
+# Portfolio tracked in GOALS.md - not counted as business revenue/expense.
