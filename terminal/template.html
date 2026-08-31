@@ -219,8 +219,37 @@ td .sect{color:var(--ink-3);font-size:11px}
   background:rgba(232,182,76,.13);color:var(--amber-t)}
 .statebadge.breakout{background:rgba(77,141,255,.16);color:var(--pos-t)}
 .scanrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.scanhint{font-size:12px;color:var(--ink-3)}
+.scanhint{font-size:12px;color:var(--ink-3);max-width:640px}
 .scanhint b{color:var(--pos-t)}
+/* scanner: breakout leaders + approaching */
+.scangrid{display:grid;grid-template-columns:1fr 300px;gap:14px;align-items:start}
+@media(max-width:900px){.scangrid{grid-template-columns:1fr}}
+.leadwrap{overflow-x:auto;margin-top:12px}
+.leadtbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.leadtbl th{text-align:right;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;padding:6px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+.leadtbl th:nth-child(2){text-align:left}
+.leadtbl td{padding:8px 10px;border-bottom:1px solid var(--line-1);text-align:right;white-space:nowrap;font-family:var(--mono)}
+.leadtbl td.rank{color:var(--ink-3);font-size:11px}
+.leadtbl td:nth-child(2){text-align:left;font-family:var(--sans)}
+.leadtbl td .sym{font-size:14px;font-weight:700}
+.leadtbl td .lsec{display:block;font-family:var(--sans);font-size:10.5px;color:var(--ink-3);margin-top:1px}
+.leadtbl td.up{color:var(--pos-t)} .leadtbl td.dn{color:var(--neg-t)}
+.leadtbl tbody tr{cursor:pointer}
+.leadtbl tbody tr:hover{background:var(--panel-2)}
+.rsbadge{display:inline-block;min-width:30px;padding:2px 6px;border-radius:6px;font-family:var(--mono);
+  font-size:11px;font-weight:700;color:#06121f;background:linear-gradient(180deg,#6fb0ff,#4d8dff)}
+.rsbadge.sm{min-width:26px;font-size:10px;padding:1px 5px}
+canvas.lspark{width:72px;height:26px;display:block}
+.applist{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.approw{border:1px solid var(--line-1);border-radius:10px;padding:9px 11px;cursor:pointer;transition:border-color .1s}
+.approw:hover{border-color:var(--pos)}
+.approw .atop{display:flex;align-items:center;gap:8px}
+.approw .atop .sym{font-size:14px;font-weight:700}
+.approw .atop .rsbadge{margin-left:auto}
+.approw .asub{font-size:10.5px;color:var(--ink-3);margin:2px 0 6px}
+.approw .ameta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.approw .ameta .up{color:var(--pos-t)} .approw .ameta .dn{color:var(--neg-t)}
 
 /* ---- research ---- */
 .hyp{border-bottom:1px solid var(--line);padding:10px 2px}
@@ -507,7 +536,7 @@ if(SNAP.data_origin==='SYNTHETIC'){
 
 /* ---------------- router ---------------- */
 const VIEWS = [['overview','Overview'],['screener','Screener'],['themes','Themes'],
-               ['scanner','Scanner'],['research','Research']];
+               ['scanner','Scanner']];
 const tabs = $('#tabs');
 tabs.innerHTML = VIEWS.map(([k,l])=>`<button data-v="${k}">${l}</button>`).join('');
 tabs.addEventListener('click', e=>{
@@ -604,11 +633,11 @@ RENDER.overview = function(){
         <span>&gt;50SMA ${b.pct_above_50sma}%</span><span>&gt;200SMA ${b.pct_above_200sma}%</span>
         <span>near hi ${b.pct_within_2pct_of_52w_high??'—'}%</span></div>
     </section>
-    <section class="panel stat">
-      <h2>Scanner</h2>
-      <div class="v">${sc.candidates_found}<span style="font-size:14px;color:var(--ink-3)"> / ${sc.symbols_scanned}</span></div>
-      <div class="k">${sc.breakouts_today} breakout · ${sc.approaching} approaching</div>
-      <div class="note" style="margin-top:8px">${esc(sc.strategy)}</div>
+    <section class="panel stat scanlink" style="cursor:pointer" onclick="location.hash='#/scanner'">
+      <h2>Breakout Leaders</h2>
+      <div class="v">${SCAN.res.leaders.length}<span style="font-size:14px;color:var(--ink-3)"> / ${SNAP.rows.filter(r=>!r.etf).length}</span></div>
+      <div class="k">${SCAN.res.approaching.length} approaching a pivot</div>
+      <div class="note" style="margin-top:8px">Leading names at or through breakout — open the Scanner →</div>
     </section>
   </div>
   <div class="grid cols2" style="margin-bottom:14px">
@@ -773,108 +802,61 @@ RENDER.themes = function(){
 
 /* ---------------- scanner ---------------- */
 RENDER.scanner = function(){
-  const sc = SNAP.scan;
-  // Prefer a client-side RUN SCAN result; otherwise the brain's precomputed scan.
-  const useClient = !!SCAN.cands;
-  const list = useClient ? SCAN.cands : sc.candidates;
+  const {leaders, approaching} = SCAN.res;
+  const pct = v => v==null ? '—' : (v>0?'+':'')+v.toFixed(1)+'%';
+  const pivot = c => c.bdist==null ? '—'
+    : c.bdist<=0 ? `${Math.abs(c.bdist).toFixed(1)}% through`
+    : `${c.bdist.toFixed(1)}% to go`;
+  const leadRows = leaders.slice(0,25).map((c,i)=>`
+    <tr data-sym="${c.symbol}">
+      <td class="rank">${i+1}</td>
+      <td><b class="sym">${esc(c.symbol)}</b><span class="lsec">${esc(c.sector||'')}</span></td>
+      <td class="num">${c.close.toFixed(2)}</td>
+      <td class="num ${c.d1>=0?'up':'dn'}">${pct(c.d1)}</td>
+      <td class="num rs"><span class="rsbadge">${c.rs.toFixed(0)}</span></td>
+      <td class="num ${c.bdist<=0?'up':''}">${pivot(c)}</td>
+      <td class="num ${c.m1>=0?'up':'dn'}">${pct(c.m1)}</td>
+      <td class="num ${c.m3>=0?'up':'dn'}">${pct(c.m3)}</td>
+      <td class="num">${c.rvol==null?'—':c.rvol.toFixed(2)+'×'}</td>
+      <td><canvas class="lspark" data-s="${c.symbol}"></canvas></td>
+    </tr>`).join('');
+
   $('#view').innerHTML = `
-  <section class="panel" style="margin-bottom:14px">
-    <h2>${esc(sc.strategy)}<span class="sub">${SNAP.rows.filter(r=>!r.etf).length} symbols scanned · ${list.filter(c=>c.state==='breakout').length} breakout · ${list.length} candidates · data as of ${sc.as_of}</span></h2>
-    <div class="scanrow">
-      <span class="scanhint">Press <b>▶ RUN SCAN</b> (top right) to re-run the SAR composite over the current data.</span>
-      <span class="asof" id="scanstamp"></span>
-    </div>
-    <div class="comp" style="grid-template-columns:150px 1fr 40px;margin-top:10px">${
-      Object.entries(sc.weights).map(([k,w])=>`
-        <span>${esc(k.replace(/_/g,' '))}</span>
-        <span class="cb" style="width:${(w*100/0.15*0.9).toFixed(0)}%;max-width:100%"></span>
-        <span class="cv">${(w*100).toFixed(0)}%</span>`).join('')
-    }</div>
-  </section>
-  <div class="grid cands">${
-    list.slice(0,60).map(c=>{
-      if(useClient){
-        const r = SNAP.rows.find(x=>x.sym===c.symbol) || {};
-        return `<section class="panel cand" data-sym="${c.symbol}">
-        <div class="chead"><span class="sym">${esc(c.symbol)}</span>
-          <span class="statebadge ${c.state==='breakout'?'breakout':(c.state==='watch'?'':'')}">${esc(c.state)}</span>
-          <span class="score">${c.score.toFixed(0)}</span></div>
-        <div class="dsub" style="margin:-4px 0 8px">${esc(c.sector||'')}</div>
-        <div class="kv">
-          <span class="k">RS percentile</span><span class="v">${c.rs==null?'—':c.rs.toFixed(1)}</span>
-          <span class="k">3-month return</span><span class="v">${c.m3==null?'—':(c.m3>0?'+':'')+c.m3.toFixed(1)+'%'}</span>
-          <span class="k">to breakout</span><span class="v">${c.bdist==null?'—':c.bdist.toFixed(2)+'%'}</span>
-          <span class="k">base quality</span><span class="v">${c.baseq==null?'—':c.baseq.toFixed(2)}</span>
-        </div></section>`;
-      }
-      const d = c.detail && c.detail.setup ? c.detail.setup : {};
-      return `<section class="panel cand" data-sym="${c.symbol}">
-      <div class="chead"><span class="sym">${esc(c.symbol)}</span>
-        <span class="statebadge ${c.state==='breakout'?'breakout':''}">${esc(c.state)}</span>
-        <span class="score">${c.score.toFixed(0)}</span></div>
-      ${Object.entries(c.components).map(([k,v])=>`
-        <div class="comp"><span>${esc(k.replace(/_/g,' '))}</span>
-          <span class="cb" style="width:${Math.max(1,v.score).toFixed(0)}%"></span>
-          <span class="cv">${v.score.toFixed(0)}</span></div>`).join('')}
-      <div class="kv" style="margin-top:12px">
-        <span class="k">prior move</span><span class="v">${d.prior_move_pct!==undefined?'+'+d.prior_move_pct.toFixed(1)+'% / '+d.prior_move_bars+' bars':'—'}</span>
-        <span class="k">base quality</span><span class="v">${d.base_quality!==undefined?d.base_quality.toFixed(2):'—'}</span>
-        <span class="k">breakout level</span><span class="v">${d.breakout_level!==undefined?d.breakout_level.toFixed(2):'—'}</span>
-        <span class="k">RS percentile</span><span class="v">${d.rs_percentile!==undefined?d.rs_percentile.toFixed(1):'—'}</span>
+  <div class="scangrid">
+    <section class="panel">
+      <h2>Breakout Leaders
+        <span class="sub">highest-RS names at or through their pivot · ${leaders.length} found · as of ${SNAP.as_of}</span></h2>
+      <div class="scanrow">
+        <span class="scanhint">The market's leaders right at the breakout — top relative strength, price at or through the pivot. "Pivot" shows how far from the breakout level each is. Press <b>▶ RUN SCAN</b> to refresh over the current data.</span>
+        <span class="asof" id="scanstamp"></span>
       </div>
-      </section>`;}).join('')
-  }</div>
-  ${list.length===0?'<section class="panel"><div class="note">No candidates. Press RUN SCAN.</div></section>':''}`;
+      ${leaders.length ? `<div class="leadwrap"><table class="leadtbl">
+        <thead><tr><th>#</th><th>Symbol</th><th>Price</th><th>Day</th><th>RS</th><th>Pivot</th><th>1M</th><th>3M</th><th>RVol</th><th>Trend</th></tr></thead>
+        <tbody>${leadRows}</tbody></table></div>`
+        : `<div class="note">No names are breaking out in the current data. Loosen nothing — this is a real read of the ${SNAP.rows.filter(r=>!r.etf).length}-name universe as of ${SNAP.as_of}.</div>`}
+    </section>
+    <section class="panel">
+      <h2>Approaching<span class="sub">${approaching.length} nearing pivot</span></h2>
+      <div class="applist">${
+        approaching.slice(0,20).map(c=>`
+        <div class="approw" data-sym="${c.symbol}">
+          <div class="atop"><b class="sym">${esc(c.symbol)}</b><span class="rsbadge sm">${c.rs.toFixed(0)}</span></div>
+          <div class="asub">${esc(c.sector||'')}</div>
+          <div class="ameta"><span>${c.bdist.toFixed(1)}% to pivot</span><span class="${c.m3>=0?'up':'dn'}">${pct(c.m3)} 3M</span></div>
+        </div>`).join('') || '<div class="note">Nothing set up near a pivot right now.</div>'
+      }</div>
+    </section>
+  </div>`;
   updateScanStamp();
-  $('#view').querySelectorAll('.cand[data-sym]').forEach(el=>{
+  // sparklines for the leader rows
+  $('#view').querySelectorAll('canvas.lspark').forEach(cv=>{
+    const row = SNAP.rows.find(x=>x.sym===cv.dataset.s);
+    if(row) drawSpark(cv, row.spark);
+  });
+  $('#view').querySelectorAll('[data-sym]').forEach(el=>{
     el.style.cursor='pointer';
     el.addEventListener('click', ()=>openDrawer(el.dataset.sym));
   });
-};
-
-/* ---------------- research ---------------- */
-RENDER.research = function(){
-  const g = SNAP.guards, hyps = SNAP.research.active_hypotheses||[];
-  $('#view').innerHTML = `
-  <div class="grid cols2">
-    <section class="panel">
-      <h2>Open hypotheses<span class="sub">${hyps.length} in the lab</span></h2>
-      ${hyps.map(h=>`<div class="hyp">
-        <div class="q">${esc(h.question)}</div>
-        <div class="s">${esc(h.statement)}</div>
-        <div class="hmeta"><span class="badge open">${esc(h.status)}</span>
-          <span class="badge">${esc(h.category)}</span>
-          ${h.spec&&h.spec.horizon?`<span class="badge">horizon ${h.spec.horizon}d</span>`:''}</div>
-      </div>`).join('') || '<div class="note">No open hypotheses.</div>'}
-    </section>
-    <div class="grid" style="align-content:start">
-      <section class="panel">
-        <h2>Risk guards</h2>
-        <div class="kv">
-          <span class="k">Mode</span><span class="v">${esc(g.mode)}</span>
-          <span class="k">Live trading</span><span class="v">${g.live_trading_enabled?'ENABLED':'disabled'}</span>
-          <span class="k">Kill switch</span><span class="v">${g.kill_switch_engaged?'ENGAGED':'off'}</span>
-          <span class="k">Max daily loss</span><span class="v">${g.max_daily_loss_pct}%</span>
-          <span class="k">Max position</span><span class="v">${g.max_position_pct}%</span>
-          <span class="k">Max exposure</span><span class="v">${g.max_portfolio_exposure_pct}%</span>
-          <span class="k">Max order notional</span><span class="v">$${g.max_order_notional.toLocaleString()}</span>
-        </div>
-        <div class="note">${esc(g.note||'')}</div>
-      </section>
-      <section class="panel">
-        <h2>Data provenance</h2>
-        <div class="note">${esc(SNAP.data_note||'')}</div>
-        ${Object.keys(REALQ).length?`<div class="note">Web-verified real closes on this page: ${
-          Object.entries(REALQ).map(([s,q])=>`${s} ${q.close.toFixed(2)} (${esc(q.date)}, ${
-            (q.sources||[]).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a>`).join(', ')})`).join(' · ')
-        }. Method: ${esc((SNAP.real&&SNAP.real.method)||'')}</div>`:''}
-        <div class="note">Every number the Brain reports carries an evidence class
-        (<b>SOURCE_FACT · INFERENCE · HYPOTHESIS · BACKTEST_RESULT · LIVE_MARKET_OBSERVATION · MODEL_ESTIMATE</b>)
-        and no number changes class silently. This page is a snapshot of those outputs,
-        not a signal service.</div>
-      </section>
-    </div>
-  </div>`;
 };
 
 /* ---------------- drawer ---------------- */
@@ -982,42 +964,39 @@ const sectorScore = {};
 SNAP.sectors.forEach(s=>{ s.members.forEach(m=>{ sectorScore[m]=s.score; }); });
 const themeScore = {};
 SNAP.themes.forEach(t=>{ t.members.forEach(m=>{ themeScore[m]=Math.max(themeScore[m]||0, t.score); }); });
+// Scans the whole embedded universe and splits it into breakout leaders (strong
+// RS names at or through their pivot) and approaching setups (qualifying bases
+// nearing the pivot). Ranked so the leading breakouts sit on top.
 function computeScan(){
-  const W = SNAP.scan.weights, regime = SNAP.regime.strength;
-  const cands = [];
+  const leaders=[], approaching=[];
   for(const r of SNAP.rows){
-    if(r.etf || r.baseq==null) continue;
-    const rs = r.rs==null?50:r.rs;
-    const comps = {
-      market_regime: regime,
-      sector_strength: sectorScore[r.sym] ?? 50,
-      theme_strength: themeScore[r.sym] ?? 50,
-      relative_strength: rs,
-      prior_momentum: Math.max(0, Math.min(100, 50 + (r.m3||0))),
-      consolidation_quality: (r.baseq||0)*100,
-      volume_pattern: Math.max(0, Math.min(100, 50 + ((r.rvol||1)-1)*50)),
-      breakout_quality: r.bdist==null?40:Math.max(0, Math.min(100, 100 - Math.abs(r.bdist)*8)),
-    };
-    let score = 0; for(const k in W) score += (comps[k]||0)*W[k];
-    // SAR setup: a qualifying base in a strong-RS leader, or a fresh breakout.
-    const breakout = r.bdist!=null && r.bdist<=0 && rs>=70;
-    const approaching = r.qual && rs>=80 && r.bdist!=null && r.bdist<=6;
-    if(!breakout && !approaching) continue;
-    cands.push({symbol:r.sym, state: breakout?'breakout':'approaching',
-      score:Math.round(score*10)/10, rs, m3:r.m3, bdist:r.bdist, baseq:r.baseq, sector:r.sector});
+    if(r.etf || r.bdist==null) continue;
+    const rs = r.rs==null?0:r.rs;
+    const row = {symbol:r.sym, sector:r.sector, close:r.close, d1:r.d1,
+                 rs, m1:r.m1, m3:r.m3, bdist:r.bdist, rvol:r.rvol, baseq:r.baseq,
+                 p52:r.p52, spark:r.spark};
+    // Leader breakout: at/through the pivot, top-decile RS, still rising.
+    if(r.bdist<=1 && rs>=85 && (r.m1==null||r.m1>-5)){
+      row.lead = rs + Math.max(0,(r.m1||0))*0.5 - Math.max(0,r.bdist)*2;  // rank key
+      leaders.push(row);
+    } else if(r.qual && rs>=70 && r.bdist>1 && r.bdist<=8){
+      approaching.push(row);
+    }
   }
-  cands.sort((a,b)=>b.score-a.score);
-  return cands;
+  leaders.sort((a,b)=>b.lead-a.lead);
+  approaching.sort((a,b)=>a.bdist-b.bdist);   // closest to the pivot first
+  return {leaders, approaching};
 }
-let SCAN = {ran:null, cands:null};
+let SCAN = {ran:null, res:null};
+SCAN.res = computeScan();   // populate on load so the Scanner is ready without a click
 function runScan(){
   const btn=$('#runscan'); btn.classList.add('busy');
   setTimeout(()=>{
-    SCAN.cands = computeScan();
+    SCAN.res = computeScan();
     SCAN.ran = new Date();
     store.set('lastscan', SCAN.ran.toISOString());
     btn.classList.remove('busy');
-    toast(`Scan complete · <b>${SCAN.cands.length}</b> candidates · ${SCAN.cands.filter(c=>c.state==='breakout').length} breakout`);
+    toast(`Scan complete · <b>${SCAN.res.leaders.length}</b> breakout leaders · ${SCAN.res.approaching.length} approaching`);
     if((location.hash.replace(/^#\//,'')||'overview')==='scanner') RENDER.scanner();
     updateScanStamp();
   }, 450);
