@@ -173,6 +173,27 @@ td .sect{color:var(--ink-3);font-size:11px}
 .chartbar{display:flex;align-items:center;gap:8px;margin:12px 0 6px}
 .chartbar .seg{margin-left:0}
 .chartbar .lvltoggle{margin-left:auto;font-size:11px;color:var(--ink-2);display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.zoomseg{display:inline-flex;align-items:center;gap:2px}
+.zoomseg button{width:24px;height:24px;font-size:15px;line-height:1;font-family:var(--mono);
+  color:var(--ink-1);background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;cursor:pointer;padding:0}
+.zoomseg button:hover:not(:disabled){border-color:var(--pos)}
+.zoomseg button:disabled{opacity:.35;cursor:default}
+.zoomseg #zoomlbl{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);min-width:34px;text-align:center}
+.volsheet{margin-top:12px;border-top:1px solid var(--line-1)}
+.volsheet>summary{cursor:pointer;font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-3);padding:8px 0 6px;list-style:none;user-select:none}
+.volsheet>summary::-webkit-details-marker{display:none}
+.volsheet>summary::before{content:"▸ ";color:var(--ink-3)}
+.volsheet[open]>summary::before{content:"▾ "}
+.volsheet-wrap{max-height:220px;overflow:auto}
+#dvoltbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+#dvoltbl th{position:sticky;top:0;background:var(--panel);color:var(--ink-3);font-weight:600;
+  text-align:right;padding:5px 8px;border-bottom:1px solid var(--line-2)}
+#dvoltbl th:first-child{text-align:left}
+#dvoltbl td{padding:4px 8px;border-bottom:1px solid var(--line-1);color:var(--ink-2)}
+#dvoltbl td.num{text-align:right}
+#dvoltbl td.up{color:var(--pos-t)} #dvoltbl td.dn{color:var(--neg-t)}
+#dvoltbl tbody tr:hover{background:var(--panel-2)}
 .pricewrap{position:relative}
 #dprice{height:180px}
 #dvol{height:52px;margin-top:2px}
@@ -348,19 +369,26 @@ const KEY_LEVELS = [
   ['sma200','200 SMA','#9aa3b8','#6a7490'],
   ['base_hi','breakout','#f478b0','#e64f95'],
 ];
-function drawPriceChart(canvas, row, type, showLevels){
-  const dpr = devicePixelRatio||1, o = row.ohlc;
+// Slice the last `nbars` candles out of a symbol's full OHLCV for the zoom window.
+function sliceOhlc(full, nbars){
+  const n = full.c.length, k = Math.max(1, Math.min(n, nbars||n)), s = n - k;
+  const cut = a => a.slice(s);
+  return {t:cut(full.t), o:cut(full.o), h:cut(full.h), l:cut(full.l), c:cut(full.c), v:cut(full.v)};
+}
+function drawPriceChart(canvas, o, levels, type, showLevels){
+  const dpr = devicePixelRatio||1;
   const w = canvas.clientWidth||360, h = canvas.clientHeight||180;
   canvas.width = w*dpr; canvas.height = h*dpr;
   const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr);
   ctx.clearRect(0,0,w,h);
   const n = o.c.length; if(!n) return;
   const padL=2, padR=52, padT=6, padB=6;
-  // y-range spans candles + any visible levels
+  // y-range from the visible candles only, so zooming in stays tight; a level
+  // that falls outside the visible price band is simply not drawn.
   let lo = Math.min(...o.l), hi = Math.max(...o.h);
-  const lv = {};
-  if(showLevels) KEY_LEVELS.forEach(([k])=>{ if(row.levels[k]!=null){ lv[k]=row.levels[k]; lo=Math.min(lo,lv[k]); hi=Math.max(hi,lv[k]); }});
   const span=(hi-lo)||1;
+  const lv = {};
+  if(showLevels) KEY_LEVELS.forEach(([k])=>{ const v=levels[k]; if(v!=null && v>=lo && v<=hi) lv[k]=v; });
   const X = i => padL + i*(w-padL-padR)/(n-1);
   const Y = v => padT + (hi-v)*(h-padT-padB)/span;
   const bw = Math.max(1.5, (w-padL-padR)/n*0.62);
@@ -411,8 +439,8 @@ function drawPriceChart(canvas, row, type, showLevels){
   }
   canvas._chart={X,Y,n,padR,w,h,o,lv};
 }
-function drawVolume(canvas, row){
-  const dpr=devicePixelRatio||1, o=row.ohlc;
+function drawVolume(canvas, o){
+  const dpr=devicePixelRatio||1;
   const w=canvas.clientWidth||360, h=canvas.clientHeight||52;
   canvas.width=w*dpr; canvas.height=h*dpr;
   const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
@@ -429,10 +457,12 @@ function drawVolume(canvas, row){
   ctx.fillText('vol '+(mx>=1e6?(mx/1e6).toFixed(1)+'M':(mx/1e3).toFixed(0)+'K'), w-padR+4, 2);
   canvas._vol={X,n,w,padR};
 }
-function chartCrosshair(priceCv, volCv, row, name){
-  const o=row.ohlc;
+// Attach once per drawer; reads the currently drawn view from priceCv._chart.o
+// so it always reflects the active zoom window without re-binding listeners.
+function chartCrosshair(priceCv, volCv, name){
   function move(e){
     const c=priceCv._chart; if(!c) return;
+    const o=c.o;
     const r=priceCv.getBoundingClientRect();
     const i=Math.max(0,Math.min(c.n-1, Math.round((e.clientX-r.left-2)/(r.width-2-c.padR)*(c.n-1))));
     const chg=i>0?((o.c[i]/o.c[i-1]-1)*100):0;
@@ -861,11 +891,16 @@ function openDrawer(sym){
       <span class="seg" id="ctype">
         <button data-ct="candle">Candle</button><button data-ct="bar">Bar</button><button data-ct="line">Line</button>
       </span>
+      <span class="zoomseg"><button id="zoomout" title="Zoom out (show more)">−</button><span id="zoomlbl">130d</span><button id="zoomin" title="Zoom in (show fewer)">+</button></span>
       <label class="lvltoggle"><input type="checkbox" id="lvlck" checked> key levels</label>
     </div>
     <div class="pricewrap"><canvas id="dprice"></canvas></div>
     <canvas id="dvol"></canvas>
     <div class="chartlegend" id="dlegend"></div>
+    <details class="volsheet" id="dvolsheet" open>
+      <summary>Daily volume — recent sessions</summary>
+      <div class="volsheet-wrap"><table id="dvoltbl"></table></div>
+    </details>
     <div class="kv">
       <span class="k">1 week</span><span class="v">${r.w1===null?'—':(r.w1>0?'+':'')+r.w1.toFixed(2)+'%'}</span>
       <span class="k">1 month</span><span class="v">${r.m1===null?'—':(r.m1>0?'+':'')+r.m1.toFixed(2)+'%'}</span>
@@ -887,21 +922,52 @@ function openDrawer(sym){
     ${r.themes.length?`<div class="tagrow">${r.themes.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}`;
   d.classList.add('open');
   const price=$('#dprice'), vol=$('#dvol');
+  const total = r.ohlc.c.length;
+  const ZOOMS = [20, 40, 65, 90, 130].filter(z=>z<=total).concat(total);
+  const ZOOM_STEPS = [...new Set(ZOOMS)].sort((a,b)=>a-b);   // ascending bar counts
   let ctype = store.get('ctype','candle'), levels = store.get('lvls', true);
+  let zi = ZOOM_STEPS.indexOf(Math.min(total, store.get('zoombars', total)));
+  if(zi<0) zi = ZOOM_STEPS.length-1;
   $('#lvlck').checked = levels;
   function render(){
-    drawPriceChart(price, r, ctype, levels);
-    drawVolume(vol, r);
+    const nb = ZOOM_STEPS[zi];
+    const view = sliceOhlc(r.ohlc, nb);
+    drawPriceChart(price, view, r.levels, ctype, levels);
+    drawVolume(vol, view);
     $('#ctype').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.ct===ctype));
+    $('#zoomlbl').textContent = nb+'d';
+    $('#zoomin').disabled = zi<=0; $('#zoomout').disabled = zi>=ZOOM_STEPS.length-1;
     $('#dlegend').innerHTML = levels ? KEY_LEVELS.filter(([k])=>r.levels[k]!=null)
       .map(([k,lab,light])=>`<span><i style="border-color:${light}"></i>${lab} ${r.levels[k].toFixed(2)}</span>`).join('') : '';
+    renderVolSheet(view);
+  }
+  // Daily volume sheet: most-recent session first, over the visible window.
+  function renderVolSheet(o){
+    const n=o.v.length, rows=[];
+    for(let i=n-1;i>=0;i--){
+      const chg = i>0 ? (o.c[i]/o.c[i-1]-1)*100 : null;
+      const vprev = i>0 ? o.v[i-1] : null;
+      const rvol = vprev ? o.v[i]/vprev : null;
+      const vfmt = o.v[i]>=1e6?(o.v[i]/1e6).toFixed(2)+'M':(o.v[i]/1e3).toFixed(0)+'K';
+      rows.push(`<tr>
+        <td>${esc(o.t[i])}</td>
+        <td class="num">${o.c[i].toFixed(2)}</td>
+        <td class="num ${chg==null?'':(chg>=0?'up':'dn')}">${chg==null?'—':(chg>0?'+':'')+chg.toFixed(2)+'%'}</td>
+        <td class="num">${vfmt}</td>
+        <td class="num ${rvol==null?'':(rvol>=1.5?'up':(rvol<0.7?'dn':''))}">${rvol==null?'—':rvol.toFixed(2)+'×'}</td>
+      </tr>`);
+    }
+    $('#dvoltbl').innerHTML =
+      `<thead><tr><th>Date</th><th>Close</th><th>Chg</th><th>Volume</th><th>RVol</th></tr></thead><tbody>${rows.join('')}</tbody>`;
   }
   render();
-  chartCrosshair(price, vol, r, r.sym);
+  chartCrosshair(price, vol, r.sym);
   $('#ctype').addEventListener('click', e=>{
     const b=e.target.closest('button'); if(!b) return;
     ctype=b.dataset.ct; store.set('ctype',ctype); render();
   });
+  $('#zoomin').addEventListener('click', ()=>{ if(zi>0){ zi--; store.set('zoombars',ZOOM_STEPS[zi]); render(); }});
+  $('#zoomout').addEventListener('click', ()=>{ if(zi<ZOOM_STEPS.length-1){ zi++; store.set('zoombars',ZOOM_STEPS[zi]); render(); }});
   $('#lvlck').addEventListener('change', e=>{ levels=e.target.checked; store.set('lvls',levels); render(); });
   $('#dclose').addEventListener('click', closeDrawer);
 }
