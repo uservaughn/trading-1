@@ -5,17 +5,17 @@ Vaughn's trading journey
 
 ## What's in this repo
 
-Imported from the `proj-1` repository (branch `claude/ai-trading-brain-build-pi2rv3`),
-which is being retired. Everything below moved here intact.
+This repository holds one thing: the **AI Trading Brain** in [`brain/`](brain/README.md)
+— a quantitative research and decision-support platform.
 
-| Path | What it is |
-|---|---|
-| [`brain/`](brain/README.md) | **AI Trading Brain** — quantitative research and decision-support platform. Start here. |
-| [`service/`](service/) | Blankd Web Studio — flat-rate website service: landing page, demo sites, outreach templates and pipeline. |
-| [`flipfinder/`](flipfinder/README.md) | eBay deal-scanner that finds underpriced listings and does the margin math. |
-| [`tracker/`](tracker/) | Simple income/expense ledger with a monthly P&L summary script. |
-| [`docs/proj-1-overview.md`](docs/proj-1-overview.md) | The original `proj-1` root README, preserved unchanged in substance. |
-| Root `*.md` | Planning and review notes carried over: `PLAN.md`, `GOALS.md`, `DECISIONS.md`, `SCHEDULE.md`, `SCORECARD.md`, and others. |
+It is not a signal service. It turns trading beliefs into measurable rules,
+tests those rules against historical data, and reports the result honestly.
+Every number it produces carries an evidence class (`SOURCE_FACT`,
+`INFERENCE`, `HYPOTHESIS`, `BACKTEST_RESULT`, `LIVE_MARKET_OBSERVATION`,
+`MODEL_ESTIMATE`) and no number is allowed to change class silently.
+
+The platform ships a CLI for seeding the knowledge base, bootstrapping market
+data and running experiments, plus a local web UI for browsing the results.
 
 ### AI Trading Brain — quick start
 
