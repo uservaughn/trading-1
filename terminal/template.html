@@ -404,7 +404,8 @@ function sliceOhlc(full, nbars){
   const cut = a => a.slice(s);
   return {t:cut(full.t), o:cut(full.o), h:cut(full.h), l:cut(full.l), c:cut(full.c), v:cut(full.v)};
 }
-function drawPriceChart(canvas, o, levels, type, showLevels){
+function drawPriceChart(canvas, o, levels, type, showLevels, emas){
+  emas = emas || [];
   const dpr = devicePixelRatio||1;
   const w = canvas.clientWidth||360, h = canvas.clientHeight||180;
   canvas.width = w*dpr; canvas.height = h*dpr;
@@ -412,9 +413,10 @@ function drawPriceChart(canvas, o, levels, type, showLevels){
   ctx.clearRect(0,0,w,h);
   const n = o.c.length; if(!n) return;
   const padL=2, padR=52, padT=6, padB=6;
-  // y-range from the visible candles only, so zooming in stays tight; a level
-  // that falls outside the visible price band is simply not drawn.
+  // y-range from the visible candles (and any visible EMA points) so zooming in
+  // stays tight; a level outside the visible price band is simply not drawn.
   let lo = Math.min(...o.l), hi = Math.max(...o.h);
+  emas.forEach(e=>e.vals.forEach(v=>{ if(v!=null){ if(v<lo)lo=v; if(v>hi)hi=v; }}));
   const span=(hi-lo)||1;
   const lv = {};
   if(showLevels) KEY_LEVELS.forEach(([k])=>{ const v=levels[k]; if(v!=null && v>=lo && v<=hi) lv[k]=v; });
@@ -466,8 +468,26 @@ function drawPriceChart(canvas, o, levels, type, showLevels){
       ctx.moveTo(x,Y(o.c[i])); ctx.lineTo(x+bw/2,Y(o.c[i])); ctx.stroke();
     }
   }
+  // EMA overlays, drawn on top of the price marks
+  emas.forEach(e=>{
+    ctx.beginPath(); let started=false;
+    for(let i=0;i<n;i++){
+      const v=e.vals[i]; if(v==null) continue;
+      const x=X(i), y=Y(v);
+      if(started) ctx.lineTo(x,y); else { ctx.moveTo(x,y); started=true; }
+    }
+    ctx.strokeStyle=e.color; ctx.lineWidth=1.4; ctx.lineJoin='round'; ctx.globalAlpha=.9; ctx.stroke(); ctx.globalAlpha=1;
+  });
   canvas._chart={X,Y,n,padR,w,h,o,lv};
 }
+// Exponential moving average over a close series (seeded with the first close).
+function emaSeries(closes, period){
+  const k = 2/(period+1), out = new Array(closes.length);
+  let prev = closes[0];
+  for(let i=0;i<closes.length;i++){ prev = i===0 ? closes[0] : closes[i]*k + prev*(1-k); out[i]=prev; }
+  return out;
+}
+const EMA_DEFS = [[10,'#f0a742'],[21,'#b78cf0'],[50,'#4fc3a1']];
 function drawVolume(canvas, o){
   const dpr=devicePixelRatio||1;
   const w=canvas.clientWidth||360, h=canvas.clientHeight||52;
@@ -874,7 +894,8 @@ function openDrawer(sym){
         <button data-ct="candle">Candle</button><button data-ct="bar">Bar</button><button data-ct="line">Line</button>
       </span>
       <span class="zoomseg"><button id="zoomout" title="Zoom out (show more)">−</button><span id="zoomlbl">130d</span><button id="zoomin" title="Zoom in (show fewer)">+</button></span>
-      <label class="lvltoggle"><input type="checkbox" id="lvlck" checked> key levels</label>
+      <label class="lvltoggle"><input type="checkbox" id="emack"> EMA</label>
+      <label class="lvltoggle" style="margin-left:0"><input type="checkbox" id="lvlck" checked> key levels</label>
     </div>
     <div class="pricewrap"><canvas id="dprice"></canvas></div>
     <canvas id="dvol"></canvas>
@@ -907,20 +928,26 @@ function openDrawer(sym){
   const total = r.ohlc.c.length;
   const ZOOMS = [20, 40, 65, 90, 130].filter(z=>z<=total).concat(total);
   const ZOOM_STEPS = [...new Set(ZOOMS)].sort((a,b)=>a-b);   // ascending bar counts
-  let ctype = store.get('ctype','candle'), levels = store.get('lvls', true);
+  let ctype = store.get('ctype','candle'), levels = store.get('lvls', true), showEma = store.get('ema', false);
   let zi = ZOOM_STEPS.indexOf(Math.min(total, store.get('zoombars', total)));
   if(zi<0) zi = ZOOM_STEPS.length-1;
-  $('#lvlck').checked = levels;
+  $('#lvlck').checked = levels; $('#emack').checked = showEma;
+  // EMAs are computed over the full series so they stay accurate when zoomed in.
+  const fullEma = EMA_DEFS.map(([p,c])=>({p, color:c, full: emaSeries(r.ohlc.c, p)}));
   function render(){
     const nb = ZOOM_STEPS[zi];
     const view = sliceOhlc(r.ohlc, nb);
-    drawPriceChart(price, view, r.levels, ctype, levels);
+    const s = r.ohlc.c.length - nb;
+    const emas = showEma ? fullEma.map(e=>({p:e.p, color:e.color, vals:e.full.slice(s)})) : [];
+    drawPriceChart(price, view, r.levels, ctype, levels, emas);
     drawVolume(vol, view);
     $('#ctype').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.ct===ctype));
     $('#zoomlbl').textContent = nb+'d';
     $('#zoomin').disabled = zi<=0; $('#zoomout').disabled = zi>=ZOOM_STEPS.length-1;
-    $('#dlegend').innerHTML = levels ? KEY_LEVELS.filter(([k])=>r.levels[k]!=null)
+    const emaLeg = showEma ? EMA_DEFS.map(([p,c])=>`<span><i style="border-color:${c}"></i>EMA ${p}</span>`).join('') : '';
+    const lvlLeg = levels ? KEY_LEVELS.filter(([k])=>r.levels[k]!=null)
       .map(([k,lab,light])=>`<span><i style="border-color:${light}"></i>${lab} ${r.levels[k].toFixed(2)}</span>`).join('') : '';
+    $('#dlegend').innerHTML = emaLeg + lvlLeg;
     renderVolSheet(view);
   }
   // Daily volume sheet: most-recent session first, over the visible window.
@@ -951,6 +978,7 @@ function openDrawer(sym){
   $('#zoomin').addEventListener('click', ()=>{ if(zi>0){ zi--; store.set('zoombars',ZOOM_STEPS[zi]); render(); }});
   $('#zoomout').addEventListener('click', ()=>{ if(zi<ZOOM_STEPS.length-1){ zi++; store.set('zoombars',ZOOM_STEPS[zi]); render(); }});
   $('#lvlck').addEventListener('change', e=>{ levels=e.target.checked; store.set('lvls',levels); render(); });
+  $('#emack').addEventListener('change', e=>{ showEma=e.target.checked; store.set('ema',showEma); render(); });
   $('#dclose').addEventListener('click', closeDrawer);
 }
 function closeDrawer(){ $('#drawer').classList.remove('open'); }
